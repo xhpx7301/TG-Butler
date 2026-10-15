@@ -58,7 +58,9 @@ main() {
         if [[ "$state" != not-found ]]; then
             systemctl stop "$unit"
             systemctl disable "$unit"
-            systemctl reset-failed "$unit"
+            # Inactive units may be unloaded after stop/disable. Clearing their
+            # failure counters is optional and must not prevent uninstallation.
+            systemctl reset-failed "$unit" 2>/dev/null || true
         fi
     done
     rm -f -- /etc/systemd/system/tg-butler.service \

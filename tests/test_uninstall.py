@@ -43,7 +43,11 @@ systemctl() {
         if [[ "$scenario" == absent ]]; then printf 'not-found\n'; else printf 'loaded\n'; fi
     else
         printf 'CALL systemctl %s\n' "$*"
-        if [[ "$1" == stop && "$scenario" == stop-fails ]]; then return 1; fi
+        if [[ "$scenario" == "$1-fails" ]]; then return 1; fi
+        if [[ "$1" == reset-failed && "$scenario" == unloaded ]]; then
+            printf 'Failed to reset failed state of unit %s: Unit %s not loaded.\n' "$2" "$2" >&2
+            return 1
+        fi
     fi
 }
 rm() { printf 'CALL rm %s\n' "$*"; }
@@ -101,10 +105,21 @@ def test_uninstall_stops_both_services_before_cleanup(tmp_path):
     assert "已卸载" in result.stdout
 
 
-def test_service_stop_failure_aborts_before_removing_anything(tmp_path):
-    result, _ = run_uninstall(tmp_path, scenario="stop-fails")
+def test_unloaded_unit_reset_failure_does_not_interrupt_cleanup(tmp_path):
+    result, directory = run_uninstall(tmp_path, scenario="unloaded")
+    assert result.returncode == 0, result.stderr
+    assert "CALL systemctl reset-failed tg-butler-web.service" in result.stdout
+    assert "CALL systemctl reset-failed tg-butler.service" in result.stdout
+    assert f"CALL rm -rf --one-file-system -- {directory}" in result.stdout
+    assert "已卸载" in result.stdout
+    assert "卸载中断" not in result.stderr
+
+
+@pytest.mark.parametrize("action", ["stop", "disable"])
+def test_service_shutdown_failure_aborts_before_removing_anything(tmp_path, action):
+    result, _ = run_uninstall(tmp_path, scenario=f"{action}-fails")
     assert result.returncode == 1
-    assert "CALL systemctl stop tg-butler-web.service" in result.stdout
+    assert f"CALL systemctl {action} tg-butler-web.service" in result.stdout
     assert "CALL rm " not in result.stdout
     assert "CALL userdel " not in result.stdout
     assert "已卸载" not in result.stdout
