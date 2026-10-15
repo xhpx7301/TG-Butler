@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "${1:-}" == --help || "${1:-}" == -h ]]; then
+    printf 'bu：打开 TG-Butler 中文管理菜单（需要 root / sudo 权限）。\n'
+    exit 0
+fi
+if [[ "$EUID" -ne 0 ]]; then
+    exec sudo /usr/local/bin/bu "$@"
+fi
+export PYTHONUTF8=1
+# Only one management menu may modify configuration or open the account session at a time.
+exec 9>/run/lock/tg-butler-menu.lock
+flock -n 9 || { printf '已有 bu 管理菜单正在运行，请先退出另一个菜单。\n' >&2; exit 1; }
+exec /opt/tg-butler/.venv/bin/python -m tg_butler.menu \
+    --config /opt/tg-butler/config.yaml "$@"

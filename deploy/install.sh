@@ -10,13 +10,12 @@ NON_INTERACTIVE=0
 
 die() { printf '错误：%s\n' "$*" >&2; exit 1; }
 as_user() { runuser -u "$SERVICE_USER" -- "$@"; }
-butler() { as_user "$INSTALL_DIR/.venv/bin/tg-butler" --config "$INSTALL_DIR/config.yaml" "$@"; }
 
 usage() {
     cat <<'HELP'
 TG-Butler Debian 一键安装
 用法：sudo bash deploy/install.sh [--non-interactive]
-  默认：安装后打开配置编辑器，完成 Telegram 登录、通知测试并启动服务。
+  默认：安装后进入 bu 中文管理菜单，填写参数、登录 Telegram 并管理服务。
   --non-interactive：仅安装环境和服务文件，保留现有配置，不登录或启动服务。
   --help：显示此帮助。
 支持 Debian 12 / 13、Python 3.11+、运行中的 systemd。重复执行保留配置和 data/。
@@ -52,7 +51,7 @@ main() {
     printf '\n[1/5] 安装 Debian 依赖\n'
     apt-get update
     DEBIAN_FRONTEND=noninteractive apt-get install -y \
-        ca-certificates curl git python3 python3-venv tzdata nano util-linux passwd
+        ca-certificates curl git python3 python3-venv tzdata nano util-linux passwd sudo
     python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)' \
         || die "需要 Python 3.11 或更新版本。"
 
@@ -89,6 +88,7 @@ main() {
         systemctl stop tg-butler.service
     fi
     as_user python3 -m venv "$INSTALL_DIR/.venv"
+    as_user "$INSTALL_DIR/.venv/bin/pip" install --upgrade pip wheel
     as_user "$INSTALL_DIR/.venv/bin/pip" install --upgrade "$INSTALL_DIR"
     if [[ ! -e "$INSTALL_DIR/.env" ]]; then
         as_user cp "$INSTALL_DIR/.env.example" "$INSTALL_DIR/.env"
@@ -103,37 +103,18 @@ main() {
     printf '\n[4/5] 注册 systemd 服务\n'
     install -m 644 "$INSTALL_DIR/deploy/tg-butler.service" \
         /etc/systemd/system/tg-butler.service
+    install -m 755 "$INSTALL_DIR/deploy/bu" /usr/local/bin/bu
     systemctl daemon-reload
     if [[ "$NON_INTERACTIVE" -eq 1 ]]; then
         printf '\n环境已安装，服务尚未启动。现有配置与 data/ 已保留。\n'
-        printf '继续配置：sudo bash %s/deploy/install.sh\n' "$INSTALL_DIR"
+        printf '输入 bu 打开中文菜单，继续配置、登录并启动服务。\n'
         return 0
     fi
 
-    printf '\n[5/5] 配置账号、群组并启动\n' >&3
-    printf '将打开 .env：填写 API ID、API HASH、Bot Token 和你的通知用户 ID。\n' >&3
-    printf '编辑器中 Ctrl+O 保存、回车确认，Ctrl+X 退出。按回车继续。' >&3
-    read -r -u 3
-    as_user nano "$INSTALL_DIR/.env" <&3 >&3 2>&3
-    printf '\n现在登录 Telegram（手机号、验证码及两步验证密码仅在此终端输入）。\n' >&3
-    butler login <&3 >&3 2>&3
-    printf '\n你的会话列表（群组请使用负数 ID）：\n' >&3
-    butler dialogs <&3 >&3 2>&3
-    printf '\n将打开 config.yaml：替换示例群组 ID，填写关注用户和签到任务。\n' >&3
-    printf '首次使用保留 data_dir: data；确认配置后保存退出。按回车继续。' >&3
-    read -r -u 3
-    as_user nano "$INSTALL_DIR/config.yaml" <&3 >&3 2>&3
-    butler check-config <&3 >&3 2>&3
-    butler notify-test <&3 >&3 2>&3
-    systemctl reset-failed tg-butler.service
-    systemctl enable --now tg-butler.service
-    # Check process startup; the bot's startup notification confirms Telegram readiness.
-    sleep 3
-    systemctl is-active --quiet tg-butler.service \
-        || die "服务尚未正常启动，请运行 journalctl -u tg-butler -n 50 检查。"
-    printf '\n安装完成，服务已启用。请确认收到“TG-Butler 已启动”的机器人通知。\n' >&3
-    printf '查看日志：sudo journalctl -u tg-butler -f\n' >&3
-    printf '修改配置：sudo -u tgbutler nano %s/config.yaml\n' "$INSTALL_DIR" >&3
+    printf '\n[5/5] 安装完成，进入 bu 中文管理菜单\n' >&3
+    printf '首次使用建议依次选择 1 填写凭据、2 登录、3 查看群组、5 配置监控、11 测试通知、12 启动服务。\n' >&3
+    printf '以后直接输入 bu 即可管理；选择 0 退出不会停止正在运行的服务。\n' >&3
+    /usr/local/bin/bu <&3 >&3 2>&3
 }
 
 trap 'printf "\n安装中断（第 %s 行）。已存在的凭据和数据会保留；若服务已停止，排查后重新运行脚本。\n" "$LINENO" >&2' ERR

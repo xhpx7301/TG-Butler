@@ -1,0 +1,182 @@
+import os
+import stat
+import subprocess
+from unittest.mock import Mock
+
+import pytest
+import yaml
+from dotenv import dotenv_values
+from pydantic import ValidationError
+
+from tg_butler.menu import Menu, ask, save_credentials, save_settings
+
+
+@pytest.fixture
+def menu(tmp_path):
+    config = tmp_path / "config.yaml"
+    save_settings(config, {"data_dir": "data", "groups": [], "checkins": []})
+    manager = Menu(config)
+    manager.active = Mock(return_value=False)
+    manager.command = Mock()
+    return manager
+
+
+def answer(monkeypatch, values):
+    replies = iter(values)
+    monkeypatch.setattr("builtins.input", lambda _: next(replies))
+
+
+def test_save_preserves_relative_data_path_and_private_permissions(menu):
+    original = menu.config.stat()
+    data = menu.read()
+    data["retention_days"] = 7
+    save_settings(menu.config, data)
+    assert yaml.safe_load(menu.config.read_text(encoding="utf-8"))["data_dir"] == "data"
+    assert menu.config.stat().st_uid == original.st_uid
+    if os.name != "nt":
+        assert stat.S_IMODE(menu.config.stat().st_mode) == 0o600
+    assert list(menu.root.glob(".config.yaml.*")) == []
+
+
+def test_invalid_settings_do_not_replace_existing_file(menu):
+    before = menu.config.read_bytes()
+    data = menu.read()
+    data["groups"] = [{"id": 1}, {"id": 1}]
+    with pytest.raises(ValidationError):
+        save_settings(menu.config, data)
+    assert menu.config.read_bytes() == before
+
+
+def test_credentials_preserve_comments_and_round_trip_special_characters(tmp_path):
+    path = tmp_path / ".env"
+    path.write_text("# my comment\nEXTRA_SETTING=keep\n", encoding="utf-8")
+    values = {
+        "TG_API_ID": "123",
+        "TG_API_HASH": "my'hash\\value",
+        "TG_BOT_TOKEN": '123:secret$()"',
+        "TG_NOTIFY_CHAT_ID": "456",
+        "SUMMARY_API_KEY": "",
+    }
+    save_credentials(path, values)
+    assert dict(dotenv_values(path)) == {"EXTRA_SETTING": "keep", **values}
+    assert "# my comment" in path.read_text(encoding="utf-8")
+    before = path.read_bytes()
+    with pytest.raises(ValidationError):
+        save_credentials(path, values | {"TG_API_ID": "bad"})
+    assert path.read_bytes() == before
+
+
+def test_secret_prompt_never_displays_existing_token(monkeypatch):
+    prompts = []
+
+    def password(prompt):
+        prompts.append(prompt)
+        return ""
+
+    monkeypatch.setattr("getpass.getpass", password)
+    assert ask("Token", "private-token", secret=True) == "private-token"
+    assert "private-token" not in prompts[0]
+
+
+def test_add_edit_delete_group_and_multiple_watch_users(menu, monkeypatch):
+    answer(monkeypatch, ["a", "-100123", "中文群", "123，456", "n", "y"])
+    menu.groups()
+    group = menu.read()["groups"][0]
+    assert group["watch_users"] == [123, 456]
+    assert group["name"] == "中文群"
+    answer(monkeypatch, ["1", "", "", "-", "y", "n"])
+    menu.groups()
+    assert menu.read()["groups"][0]["watch_users"] == []
+    assert menu.read()["groups"][0]["notify_all"]
+    answer(monkeypatch, ["d", "1", "y"])
+    menu.groups()
+    assert menu.read()["groups"] == []
+
+
+def test_invalid_checkin_does_not_corrupt_file(menu, monkeypatch):
+    before = menu.config.read_bytes()
+    answer(monkeypatch, ["a", "签到", "-100123", "25:00", "/checkin", "n"])
+    with pytest.raises(ValidationError):
+        menu.checkins()
+    assert menu.config.read_bytes() == before
+
+
+def test_checkin_confirmation_settings_are_saved(menu, monkeypatch):
+    answer(
+        monkeypatch,
+        ["a", "签到", "-100123", "09:15", "/go", "y", "789", "成功|已签到", "失败", "y", "120"],
+    )
+    menu.checkins()
+    job = menu.read()["checkins"][0]
+    assert job["responder_id"] == 789
+    assert job["success_pattern"] == "成功|已签到"
+    assert job["require_reply"]
+    assert job["timeout_seconds"] == 120
+
+
+def test_disable_ai_keeps_other_settings_and_local_digest(menu, monkeypatch):
+    data = menu.read()
+    data["summary"] = {"api_url": "https://example.test/v1/chat/completions", "model": "m"}
+    save_settings(menu.config, data)
+    answer(monkeypatch, ["y", "01:00", "n", "100", "2000"])
+    menu.summary()
+    assert menu.read()["summary"] == {
+        "enabled": True,
+        "at": "01:00",
+        "api_url": None,
+        "model": None,
+        "max_messages": 100,
+        "max_chars": 2000,
+    }
+
+
+def test_configuration_apply_restarts_only_running_service(menu):
+    menu.apply()
+    menu.command.assert_not_called()
+    menu.active.return_value = True
+    menu.apply()
+    menu.command.assert_called_once_with(["systemctl", "restart", "tg-butler.service"])
+
+
+def test_login_failure_still_restores_running_service(menu):
+    menu.active.return_value = True
+
+    def invoke(argv):
+        if argv[0] == "runuser":
+            raise subprocess.CalledProcessError(1, argv)
+
+    menu.command.side_effect = invoke
+    with pytest.raises(subprocess.CalledProcessError):
+        menu.cli("login", session=True)
+    commands = [call.args[0] for call in menu.command.call_args_list]
+    assert commands[0] == ["systemctl", "stop", "tg-butler.service"]
+    assert commands[-1] == ["systemctl", "start", "tg-butler.service"]
+
+
+def test_nonrunning_service_not_started_after_listing_groups(menu):
+    menu.cli("dialogs", session=True)
+    assert len(menu.command.call_args_list) == 1
+    assert menu.command.call_args.args[0][0] == "runuser"
+
+
+def test_failed_update_does_not_claim_success_or_exit(menu, monkeypatch, capsys):
+    answer(monkeypatch, ["y"])
+    menu.command.side_effect = subprocess.CalledProcessError(1, ["bash"])
+    with pytest.raises(subprocess.CalledProcessError):
+        menu.update()
+    assert "更新完成" not in capsys.readouterr().out
+
+
+def test_menu_dispatch_and_exit(menu, monkeypatch, capsys):
+    answer(monkeypatch, ["invalid", "9", "0"])
+    menu.loop()
+    output = capsys.readouterr().out
+    assert "无效选项" in output
+    assert "中文管理菜单" in output
+    assert "保留：30 天" in output
+
+
+def test_menu_overview_does_not_read_or_display_credentials(menu, capsys):
+    (menu.root / ".env").write_text("TG_BOT_TOKEN=private-token", encoding="utf-8")
+    menu.overview()
+    assert "private-token" not in capsys.readouterr().out

@@ -11,9 +11,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: bash -n deploy/install.sh
-      - run: shellcheck deploy/install.sh
+      - run: bash -n deploy/install.sh && bash -n deploy/update.sh && bash -n deploy/bu
+      - run: shellcheck deploy/install.sh deploy/update.sh deploy/bu
       - run: bash deploy/install.sh --help
+      - run: bash deploy/update.sh --help && bash deploy/bu --help
 
   test:
     runs-on: ubuntu-latest

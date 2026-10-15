@@ -18,7 +18,7 @@ curl -fsSL https://raw.githubusercontent.com/xhpx7301/TG-Butler/main/deploy/inst
 
 如果提示 `curl: command not found`，先执行 `sudo apt-get update && sudo apt-get install -y curl`（root 用户去掉 `sudo`）。
 
-脚本会安装依赖、创建专用账号、下载代码、建立 Python 虚拟环境并注册 systemd 服务，然后打开编辑器让你填写凭据、登录 Telegram、配置群组；校验配置、测试通知后启动服务并设置开机启动。编辑器使用 `Ctrl+O`、回车保存，`Ctrl+X` 退出。首次安装仍需你输入验证码和可能的两步验证密码，脚本无法代替 Telegram 的账号验证。
+脚本会安装依赖、创建专用账号、下载代码、建立 Python 虚拟环境并注册 systemd 服务，然后进入 **bu 中文管理菜单**。按编号逐项填写凭据、登录 Telegram、配置群组、测试通知和启动服务，无需在编辑器中修改配置文件。首次安装仍需你输入验证码和可能的两步验证密码，脚本无法代替 Telegram 的账号验证。
 
 运行前请准备下文列出的 Telegram 应用凭据、通知机器人 Token 和你自己的用户 ID，并向通知机器人发送 `/start`。群组 ID 会在登录后列出；关注用户 ID、签到命令和签到机器人的数字 ID 需按实际群组填写。
 
@@ -30,7 +30,44 @@ curl -fsSL https://raw.githubusercontent.com/xhpx7301/TG-Butler/main/deploy/inst
 sudo bash deploy/install.sh --non-interactive
 ```
 
-此模式不填写凭据、不登录、不启动服务；如果已有运行中的服务，会先停止。完整手动安装流程见下文“Debian 部署”。
+此模式不填写凭据、不登录、不启动服务；如果已有运行中的服务，会先停止。安装完输入 `bu` 即可配置。完整手动安装流程见下文“Debian 部署”。
+
+## bu 中文管理菜单
+
+安装后在服务器任意目录输入：
+
+```bash
+bu
+```
+
+普通用户会自动请求 sudo 权限，root 可直接使用。菜单包含：
+
+| 选项 | 功能 |
+| --- | --- |
+| 1–4 | 填写 Telegram 凭据和通知机器人、登录账号、查看群组与成员 ID |
+| 5 | 添加、编辑、删除监控群组，配置多个关注用户 ID、全群提醒、群组日报开关 |
+| 6 | 日报开关、发送时间、AI 接口和模型、输入条数与字数限制 |
+| 7 | 添加、编辑、删除签到任务，设置时间、命令、回复机器人、成功/失败规则及超时 |
+| 8–11 | 时区、消息保留天数、通知队列、配置总览、配置校验、通知测试 |
+| 12–18 | 启停与重启服务、开机启动、服务状态、日志、执行记录、手动日报 |
+| 19 | 从 GitHub 更新脚本、依赖和 bu 菜单，保留凭据、配置与数据 |
+| 0 | 退出菜单，保持当前服务状态 |
+
+首次配置推荐顺序：**1 → 2 → 3 → 5 → 6/7（按需）→ 11 → 12**。示例群组 ID 必须替换成真实 ID，或在菜单中删除。菜单输入回车保留当前值；可选项提示中支持 `-` 清空。密钥输入不回显，配置总览隐藏密钥。
+
+保存参数前会校验，校验失败不覆盖文件；保存成功会重启正在运行的服务，使参数生效。服务原本停止时保持停止。登录、查看群组/成员以及手动日报会临时暂停服务，完成后恢复原运行状态，以免共用账号会话。暂停期间的新消息不会自动补抓。菜单通过系统锁限制同时打开多个 `bu`。
+
+更新选项只允许干净的 `main` 分支及官方 origin，并使用快进合并；遇到代码冲突会中止。更新成功恢复原有服务运行状态；失败时若服务已停止，修复后需重新更新并手动启动。现有 systemd 服务文件会保留；模板有变化时另存为 `.service.new` 供人工比对。更新完成退出菜单，再次输入 `bu` 加载新版。
+
+**已经安装旧版、还没有 bu 的服务器**：先退出旧安装流程的 nano（`Ctrl+X`；不保存示例凭据也可以），在 SSH 终端重新执行上方一键安装命令，即可保留数据并安装菜单。安装过程会停止已有服务，之后在菜单中启动。也可以执行：
+
+```bash
+sudo -u tgbutler git -C /opt/tg-butler pull --ff-only origin main
+sudo bash /opt/tg-butler/deploy/install.sh --non-interactive
+bu
+```
+
+不要在旧 nano 提示界面内粘贴 Shell 命令。
 
 ## 首版功能
 
@@ -43,7 +80,7 @@ sudo bash deploy/install.sh --non-interactive
 - 提供登录、列出群组/成员 ID、校验配置、测试通知、手动日报及任务状态查询命令。
 - 使用 systemd 管理开机启动、故障重启和日志。
 
-这是基于配置文件的命令行首版。新增监控用户和签到任务时修改 `config.yaml` 并重启服务；当前没有网页管理界面或机器人管理命令。
+提供 `bu` 中文终端菜单和命令行；也可直接修改 `config.yaml` 并重启服务。当前没有网页管理界面或机器人管理命令。
 
 ## 工作方式
 
@@ -168,6 +205,8 @@ sudo systemctl status tg-butler
 sudo journalctl -u tg-butler -f
 ```
 
+手动安装如需 `bu` 菜单，再执行 `sudo install -m 755 /opt/tg-butler/deploy/bu /usr/local/bin/bu`（普通用户还需安装 `sudo`）。
+
 服务默认只能写入 `/opt/tg-butler/data`。如果修改 `data_dir`，也要修改 service 文件中的 `ReadWritePaths` 并重新执行 `daemon-reload`。服务不需要 root 权限，也不需要开放入站端口。若 Telegram 不可直连，可先为服务器配置可用的出站网络；本项目当前没有内置代理配置项。
 
 ## 日报与 AI 摘要
@@ -224,12 +263,10 @@ sudo -u tgbutler /opt/tg-butler/.venv/bin/tg-butler --config /opt/tg-butler/conf
 
 ## 更新与备份
 
+推荐运行 `bu` 并选择 **19. 更新脚本**。不打开菜单也可以执行：
+
 ```bash
-sudo systemctl stop tg-butler
-cd /opt/tg-butler
-sudo -u tgbutler git pull --ff-only
-sudo -u tgbutler /opt/tg-butler/.venv/bin/pip install --upgrade /opt/tg-butler
-sudo systemctl start tg-butler
+sudo bash /opt/tg-butler/deploy/update.sh
 ```
 
 备份前先停止服务，再复制 `.env`、`config.yaml` 和整个 `data/`，并妥善加密保管。`data/` 包含 SQLite 数据库及可能的 WAL 文件，复制单个数据库文件可能丢失尚未合并的记录。
