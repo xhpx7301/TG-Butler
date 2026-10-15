@@ -2,6 +2,36 @@
 
 在 Debian 服务器常驻运行的个人 Telegram 助手：监控指定群组和用户、生成每日摘要、定时发送签到命令，并通过你创建的 Telegram 机器人通知你。
 
+## 一键安装（Debian 12 / 13）
+
+在服务器的 SSH 终端中执行（需要已安装 `curl`，普通用户需要 sudo 权限）：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/xhpx7301/TG-Butler/main/deploy/install.sh | sudo bash
+```
+
+如果当前就是 root 用户，使用：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/xhpx7301/TG-Butler/main/deploy/install.sh | bash
+```
+
+如果提示 `curl: command not found`，先执行 `sudo apt-get update && sudo apt-get install -y curl`（root 用户去掉 `sudo`）。
+
+脚本会安装依赖、创建专用账号、下载代码、建立 Python 虚拟环境并注册 systemd 服务，然后打开编辑器让你填写凭据、登录 Telegram、配置群组；校验配置、测试通知后启动服务并设置开机启动。编辑器使用 `Ctrl+O`、回车保存，`Ctrl+X` 退出。首次安装仍需你输入验证码和可能的两步验证密码，脚本无法代替 Telegram 的账号验证。
+
+运行前请准备下文列出的 Telegram 应用凭据、通知机器人 Token 和你自己的用户 ID，并向通知机器人发送 `/start`。群组 ID 会在登录后列出；关注用户 ID、签到命令和签到机器人的数字 ID 需按实际群组填写。
+
+重复运行会更新 `main` 代码、保留 `.env`、`config.yaml` 和 `data/`，并在重新配置前停止服务。安装中断时检查终端错误后重新执行即可。默认安装到 `/opt/tg-butler`，首次使用保持 `data_dir: data`；自定义路径需按下文调整 systemd 服务。
+
+只安装环境、稍后手动配置，可在已经克隆的仓库执行：
+
+```bash
+sudo bash deploy/install.sh --non-interactive
+```
+
+此模式不填写凭据、不登录、不启动服务；如果已有运行中的服务，会先停止。完整手动安装流程见下文“Debian 部署”。
+
 ## 首版功能
 
 - 按群组配置监控范围，通过数字用户 ID 指定关注用户；支持全群实时提醒。

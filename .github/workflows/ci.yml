@@ -7,6 +7,14 @@ permissions:
   contents: read
 
 jobs:
+  installer:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash -n deploy/install.sh
+      - run: shellcheck deploy/install.sh
+      - run: bash deploy/install.sh --help
+
   test:
     runs-on: ubuntu-latest
     strategy:
