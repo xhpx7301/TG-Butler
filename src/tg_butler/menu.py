@@ -16,7 +16,14 @@ import yaml
 from dotenv import dotenv_values, set_key
 from pydantic import ValidationError
 
-from tg_butler.config import Checkin, Credentials, Group, Settings
+from tg_butler.config import (
+    ApplicationCredentials,
+    Checkin,
+    Credentials,
+    Group,
+    NotificationCredentials,
+    Settings,
+)
 
 SERVICE = "tg-butler.service"
 
@@ -44,14 +51,26 @@ def save_settings(path: Path, data: dict) -> None:
     atomic_write(path, yaml.safe_dump(data, allow_unicode=True, sort_keys=False))
 
 
-def save_credentials(path: Path, values: dict[str, str]) -> None:
-    Credentials(
-        api_id=values.get("TG_API_ID", ""),
-        api_hash=values.get("TG_API_HASH", ""),
-        bot_token=values.get("TG_BOT_TOKEN", ""),
-        notify_chat_id=values.get("TG_NOTIFY_CHAT_ID", ""),
-        summary_api_key=values.get("SUMMARY_API_KEY", ""),
-    )
+def save_credentials(path: Path, values: dict[str, str], section: str = "all") -> None:
+    if section not in {"all", "application", "notification", "ai"}:
+        raise ValueError("Unknown credential section")
+    if section == "application":
+        ApplicationCredentials(
+            api_id=values.get("TG_API_ID", ""), api_hash=values.get("TG_API_HASH", "")
+        )
+    elif section == "notification":
+        NotificationCredentials(
+            bot_token=values.get("TG_BOT_TOKEN", ""),
+            notify_chat_id=values.get("TG_NOTIFY_CHAT_ID", ""),
+        )
+    elif section == "all":
+        Credentials(
+            api_id=values.get("TG_API_ID", ""),
+            api_hash=values.get("TG_API_HASH", ""),
+            bot_token=values.get("TG_BOT_TOKEN", ""),
+            notify_chat_id=values.get("TG_NOTIFY_CHAT_ID", ""),
+            summary_api_key=values.get("SUMMARY_API_KEY", ""),
+        )
     # Use dotenv's escaping rules, preserving unrelated entries and comments.
     fd, temporary = tempfile.mkstemp(dir=path.parent)
     os.close(fd)
@@ -152,21 +171,54 @@ class Menu:
             self.command(argv)
 
     def credentials(self) -> None:
+        self.edit_credentials("application")
+
+    def notification_credentials(self) -> None:
+        self.edit_credentials("notification")
+
+    def ai_credentials(self) -> None:
+        self.edit_credentials("ai")
+
+    def edit_credentials(self, section: str) -> None:
         path = self.root / ".env"
-        values = {key: value or "" for key, value in dotenv_values(path).items()}
-        print("\n填写 Telegram 凭据（密钥输入不回显，回车保留；不需要加引号）。")
-        print("先在 my.telegram.org 取得应用凭据，在 @BotFather 创建通知机器人并向它发送 /start。")
-        for key, label, secret in [
-            ("TG_API_ID", "应用 API ID（数字）", False),
-            ("TG_API_HASH", "应用 API HASH", True),
-            ("TG_BOT_TOKEN", "通知机器人 Token", True),
-            ("TG_NOTIFY_CHAT_ID", "你的通知用户 ID（数字）", False),
-            ("SUMMARY_API_KEY", "AI 摘要 API Key（可选）", True),
-        ]:
-            values[key] = ask(
-                label, values.get(key, ""), secret=secret, clear=key == "SUMMARY_API_KEY"
+        current = {key: value or "" for key, value in dotenv_values(path).items()}
+        if current.get("TG_API_HASH") == "replace_with_api_hash":
+            current["TG_API_HASH"] = ""
+            if current.get("TG_API_ID") == "123456":
+                current["TG_API_ID"] = ""
+        if current.get("TG_BOT_TOKEN") == "replace_with_bot_token":
+            current["TG_BOT_TOKEN"] = ""
+            if current.get("TG_NOTIFY_CHAT_ID") == "123456789":
+                current["TG_NOTIFY_CHAT_ID"] = ""
+        print("\n首次需要手动填写；真实值回车保留，示例占位值视为未设置。密钥输入不回显。")
+        fields = {
+            "application": [
+                ("TG_API_ID", "应用 API ID（数字）", False),
+                ("TG_API_HASH", "应用 API HASH", True),
+            ],
+            "notification": [
+                ("TG_BOT_TOKEN", "通知机器人 Token", True),
+                ("TG_NOTIFY_CHAT_ID", "你的通知用户 ID（数字）", False),
+            ],
+            "ai": [
+                ("SUMMARY_API_KEY", "AI 摘要 API Key（可选）", True),
+            ],
+        }
+        if section == "application":
+            print("用你的 Telegram 账号登录 https://my.telegram.org → API development tools。")
+            print("创建应用取得 API ID / API HASH，用于账号登录、读取群消息与发送签到。")
+        elif section == "notification":
+            print(
+                "在 @BotFather 创建机器人取得 Token，向机器人发送 /start，再填写接收通知的用户 ID。"
             )
-        save_credentials(path, values)
+        else:
+            print("此密钥来自你选择的 AI 服务商，仅用于日报总结，与 Telegram 应用无关。")
+        values = {}
+        for key, label, secret in fields[section]:
+            values[key] = ask(
+                label, current.get(key, ""), secret=secret, clear=key == "SUMMARY_API_KEY"
+            )
+        save_credentials(path, values, section=section)
         self.apply()
 
     def select_record(self, records: list[dict], label: str) -> tuple[int, str] | None:
@@ -234,7 +286,7 @@ class Menu:
         ):
             record["api_url"] = ask("完整 HTTPS Chat Completions 地址", record.get("api_url") or "")
             record["model"] = ask("模型名称", record.get("model") or "")
-            print("AI API Key 请在主菜单“Telegram 凭据”中填写。")
+            print("AI API Key 请在主菜单“21. AI 摘要密钥”中填写。")
         else:
             record["api_url"] = None
             record["model"] = None
@@ -347,18 +399,21 @@ class Menu:
             print("\n══════════ TG-Butler 中文管理菜单 ══════════")
             print(f"服务：{'运行中' if self.active() else '未运行'}")
             print(
-                " 1. Telegram 凭据与通知机器人\n 2. 登录 Telegram 账号\n"
+                " 1. Telegram 账号应用凭据（API ID / HASH）\n 2. 登录 Telegram 账号\n"
                 " 3. 查看群组 ID\n 4. 查看群成员 ID\n 5. 群组与关注用户管理\n"
                 " 6. 日报与 AI 摘要设置\n 7. 定时签到任务管理\n 8. 时区、保留天数与通知队列\n"
                 " 9. 查看当前配置（隐藏密钥）\n10. 校验配置\n11. 测试机器人通知\n"
                 "12. 启动服务 / 开机启动\n13. 停止服务\n14. 重启服务\n"
                 "15. 查看服务状态\n16. 查看最近日志\n17. 查看任务执行记录\n"
-                "18. 手动发送指定日期日报\n19. 更新脚本\n 0. 退出"
+                "18. 手动发送指定日期日报\n19. 更新脚本\n"
+                "20. 通知机器人设置（Token / 接收用户 ID）\n21. AI 摘要密钥\n 0. 退出"
             )
             try:
                 choice = input("请输入选项：").strip()
                 actions = {
                     "1": self.credentials,
+                    "20": self.notification_credentials,
+                    "21": self.ai_credentials,
                     "2": lambda: self.cli("login", session=True),
                     "3": lambda: self.cli("dialogs", session=True),
                     "5": self.groups,

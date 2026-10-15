@@ -180,3 +180,87 @@ def test_menu_overview_does_not_read_or_display_credentials(menu, capsys):
     (menu.root / ".env").write_text("TG_BOT_TOKEN=private-token", encoding="utf-8")
     menu.overview()
     assert "private-token" not in capsys.readouterr().out
+
+
+def test_application_saves_without_bot_and_ignores_example_defaults(menu, monkeypatch):
+    path = menu.root / ".env"
+    path.write_text(
+        "TG_API_ID=123456\nTG_API_HASH=replace_with_api_hash\n"
+        "TG_BOT_TOKEN=replace_with_bot_token\n",
+        encoding="utf-8",
+    )
+    prompts = []
+
+    def ask_value(label, default="", **kwargs):
+        prompts.append((label, default))
+        return "123" if "ID" in label else "my-real-hash"
+
+    monkeypatch.setattr("tg_butler.menu.ask", ask_value)
+    menu.credentials()
+    result = dotenv_values(path)
+    assert result["TG_API_HASH"] == "my-real-hash"
+    assert result["TG_BOT_TOKEN"] == "replace_with_bot_token"
+    assert len(prompts) == 2
+    assert all(default == "" for _, default in prompts)
+
+
+def test_bot_setup_is_independent_and_preserves_application(menu, monkeypatch):
+    path = menu.root / ".env"
+    path.write_text("TG_API_ID=\nTG_API_HASH=\nSUMMARY_API_KEY=keep\n", encoding="utf-8")
+    answer(monkeypatch, ["456"])
+    monkeypatch.setattr("getpass.getpass", lambda _: "123:real-token")
+    menu.notification_credentials()
+    result = dotenv_values(path)
+    assert result["TG_BOT_TOKEN"] == "123:real-token"
+    assert result["TG_NOTIFY_CHAT_ID"] == "456"
+    assert result["TG_API_HASH"] == ""
+    assert result["SUMMARY_API_KEY"] == "keep"
+
+
+def test_ai_key_can_save_and_clear_independently(menu, monkeypatch):
+    path = menu.root / ".env"
+    path.write_text("TG_BOT_TOKEN=preserve\n", encoding="utf-8")
+    monkeypatch.setattr("getpass.getpass", lambda _: "ai-key")
+    menu.ai_credentials()
+    assert dotenv_values(path)["SUMMARY_API_KEY"] == "ai-key"
+    monkeypatch.setattr("getpass.getpass", lambda _: "-")
+    menu.ai_credentials()
+    assert dotenv_values(path)["SUMMARY_API_KEY"] == ""
+    assert dotenv_values(path)["TG_BOT_TOKEN"] == "preserve"
+
+
+@pytest.mark.parametrize(
+    "section,values",
+    [
+        ("application", {"TG_API_ID": "123456", "TG_API_HASH": "replace_with_api_hash"}),
+        (
+            "notification",
+            {"TG_BOT_TOKEN": "replace_with_bot_token", "TG_NOTIFY_CHAT_ID": "123456789"},
+        ),
+    ],
+)
+def test_example_credentials_rejected_without_overwriting(menu, section, values):
+    path = menu.root / ".env"
+    path.write_text("# preserve\n", encoding="utf-8")
+    with pytest.raises(ValidationError):
+        save_credentials(path, values, section=section)
+    assert path.read_text(encoding="utf-8") == "# preserve\n"
+
+
+@pytest.mark.parametrize(
+    "key,value",
+    [
+        ("TG_API_HASH", "replace_with_api_hash"),
+        ("TG_BOT_TOKEN", "replace_with_bot_token"),
+    ],
+)
+def test_full_validation_rejects_both_placeholder_types(menu, key, value):
+    values = {
+        "TG_API_ID": "123",
+        "TG_API_HASH": "hash",
+        "TG_BOT_TOKEN": "token",
+        "TG_NOTIFY_CHAT_ID": "456",
+    }
+    values[key] = value
+    with pytest.raises(ValidationError):
+        save_credentials(menu.root / ".env", values)

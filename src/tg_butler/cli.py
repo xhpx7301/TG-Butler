@@ -13,7 +13,12 @@ from zoneinfo import ZoneInfo
 from pydantic import ValidationError
 
 from tg_butler.app import connect_authorized, make_client, make_notifier, run
-from tg_butler.config import load_credentials, load_settings
+from tg_butler.config import (
+    load_application_credentials,
+    load_credentials,
+    load_notification_credentials,
+    load_settings,
+)
 from tg_butler.store import Store
 from tg_butler.summary import send_daily
 
@@ -27,8 +32,8 @@ async def execute(args) -> None:
         finally:
             store.close()
         return
-    credentials = load_credentials(args.config)
     if args.command == "check-config":
+        load_credentials(args.config)
         print(
             f"配置校验通过：{len(settings.groups)} 个群组，"
             f"{len(settings.checkins)} 个签到任务，时区 {settings.timezone}。"
@@ -36,9 +41,10 @@ async def execute(args) -> None:
         print("尚未连接 Telegram；账号权限、通知目标和签到回复规则需实际验证。")
         return
     if args.command == "run":
-        await run(settings, credentials)
+        await run(settings, load_credentials(args.config))
         return
     if args.command in {"login", "dialogs", "members"}:
+        credentials = load_application_credentials(args.config)
         client = make_client(settings, credentials)
         try:
             if args.command == "login":
@@ -60,6 +66,11 @@ async def execute(args) -> None:
         finally:
             await client.disconnect()
         return
+    credentials = (
+        load_notification_credentials(args.config)
+        if args.command == "notify-test"
+        else load_credentials(args.config)
+    )
     notifier = make_notifier(settings, credentials)
     try:
         if args.command == "notify-test":

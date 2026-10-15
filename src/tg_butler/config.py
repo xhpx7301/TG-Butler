@@ -95,11 +95,29 @@ class Settings(StrictModel):
         return self
 
 
-class Credentials(BaseModel):
+class ApplicationCredentials(BaseModel):
     api_id: int = Field(gt=0)
     api_hash: SecretStr = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def reject_application_example(self) -> ApplicationCredentials:
+        if self.api_hash.get_secret_value() == "replace_with_api_hash":
+            raise ValueError("请在 my.telegram.org 申请并填写真实 API ID / API HASH")
+        return self
+
+
+class NotificationCredentials(BaseModel):
     bot_token: SecretStr = Field(min_length=1)
     notify_chat_id: int
+
+    @model_validator(mode="after")
+    def reject_notification_example(self) -> NotificationCredentials:
+        if self.bot_token.get_secret_value() == "replace_with_bot_token":
+            raise ValueError("请填写 BotFather 提供的真实 Bot Token")
+        return self
+
+
+class Credentials(ApplicationCredentials, NotificationCredentials):
     summary_api_key: SecretStr = SecretStr("")
 
 
@@ -120,4 +138,19 @@ def load_credentials(config_path: Path) -> Credentials:
         bot_token=os.environ.get("TG_BOT_TOKEN", ""),
         notify_chat_id=os.environ.get("TG_NOTIFY_CHAT_ID", ""),
         summary_api_key=os.environ.get("SUMMARY_API_KEY", ""),
+    )
+
+
+def load_application_credentials(config_path: Path) -> ApplicationCredentials:
+    load_dotenv(config_path.resolve().parent / ".env", override=False)
+    return ApplicationCredentials(
+        api_id=os.environ.get("TG_API_ID", ""), api_hash=os.environ.get("TG_API_HASH", "")
+    )
+
+
+def load_notification_credentials(config_path: Path) -> NotificationCredentials:
+    load_dotenv(config_path.resolve().parent / ".env", override=False)
+    return NotificationCredentials(
+        bot_token=os.environ.get("TG_BOT_TOKEN", ""),
+        notify_chat_id=os.environ.get("TG_NOTIFY_CHAT_ID", ""),
     )

@@ -12,7 +12,13 @@ from telethon import TelegramClient, events
 from telethon.utils import get_display_name
 
 from tg_butler.checkin import run_checkin
-from tg_butler.config import Credentials, Settings, time_parts
+from tg_butler.config import (
+    ApplicationCredentials,
+    Credentials,
+    NotificationCredentials,
+    Settings,
+    time_parts,
+)
 from tg_butler.notify import Notifier
 from tg_butler.store import Store
 from tg_butler.summary import message_link, send_daily
@@ -20,7 +26,7 @@ from tg_butler.summary import message_link, send_daily
 log = logging.getLogger(__name__)
 
 
-def make_client(settings: Settings, credentials: Credentials) -> TelegramClient:
+def make_client(settings: Settings, credentials: ApplicationCredentials) -> TelegramClient:
     settings.data_dir.mkdir(parents=True, exist_ok=True)
     return TelegramClient(
         str(settings.data_dir / "user"),
@@ -30,7 +36,7 @@ def make_client(settings: Settings, credentials: Credentials) -> TelegramClient:
     )
 
 
-def make_notifier(settings: Settings, credentials: Credentials) -> Notifier:
+def make_notifier(settings: Settings, credentials: NotificationCredentials) -> Notifier:
     return Notifier(
         credentials.bot_token.get_secret_value(),
         credentials.notify_chat_id,
