@@ -154,7 +154,7 @@ def test_web_credentials_preserve_secrets_when_blank(web):
     assert dotenv_values(config.parent / ".env")["SUMMARY_API_KEY"] == ""
 
 
-def test_no_default_admin_or_password_plaintext(tmp_path):
+def test_password_validation_and_hash_storage(tmp_path):
     store = AdminStore(tmp_path)
     assert store.get() is None
     assert store.verify("admin", "admin") is None
@@ -163,6 +163,55 @@ def test_no_default_admin_or_password_plaintext(tmp_path):
     store.set("admin", "long-password-1234")
     assert "long-password-1234" not in store.path.read_bytes().decode(errors="ignore")
     assert store.get()["password_hash"].startswith("scrypt:")
+
+
+def test_default_admin_login_without_telegram_configuration(tmp_path):
+    # A fresh dashboard must work before any Telegram credentials/configuration exist.
+    app = create_app(tmp_path / "config.yaml")
+    client = app.test_client()
+    info = client.get("/api/session").json
+    assert info["initialized"] is True
+    response = client.post(
+        "/api/login",
+        json={"username": "pingzi", "password": "pingzi"},
+        headers={"X-CSRF-Token": info["csrf"]},
+    )
+    assert response.status_code == 200
+    assert response.json["username"] == "pingzi"
+    store = app.extensions["admin_store"]
+    assert store.get()["password_hash"].startswith("scrypt:")
+    assert b"pingzi" not in store.get()["password_hash"].encode()
+
+
+def test_default_initialization_preserves_custom_admin_and_sessions(tmp_path):
+    store = AdminStore(tmp_path)
+    assert store.initialize_default() is True
+    initial = store.get()
+    assert store.initialize_default() is False
+    assert store.get() == initial
+    store.set("customadmin", "custom-password-1234")
+    before = store.get()
+    signing_secret = store.secret()
+    create_app(tmp_path / "config.yaml")
+    assert store.get() == before
+    assert store.secret() == signing_secret
+    assert store.verify("customadmin", "custom-password-1234")
+    assert store.verify("pingzi", "pingzi") is None
+
+
+def test_installer_admin_initialization_is_noninteractive_and_preserves_account(
+    tmp_path, monkeypatch
+):
+    from tg_butler.admin import main
+
+    monkeypatch.setattr("sys.argv", ["tg_butler.admin", "initialize", "--root", str(tmp_path)])
+    main()
+    store = AdminStore(tmp_path)
+    assert store.verify("pingzi", "pingzi")
+    store.set("customadmin", "custom-password-1234")
+    before = store.get()
+    main()
+    assert store.get() == before
 
 
 def test_security_headers_assets_and_cookie_settings(web):

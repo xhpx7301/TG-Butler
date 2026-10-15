@@ -44,6 +44,7 @@ def create_app(config: Path, *, control=system_control) -> Flask:
     config = config.resolve()
     root = config.parent
     admin = AdminStore(root)
+    admin.initialize_default()
     options = web_options(root)
     app = Flask(__name__)
     app.config.update(
@@ -141,7 +142,9 @@ def create_app(config: Path, *, control=system_control) -> Flask:
         data = request.get_json()
         account = admin.verify(str(data.get("username", "")), str(data.get("password", "")))
         if not account:
-            return jsonify(error="用户名或密码错误；首次使用请先在 bu 的管理员设置中创建账号"), 401
+            return jsonify(
+                error="用户名或密码错误；忘记密码可在 bu → 1 网页后台 → 2 管理员账户 重置"
+            ), 401
         session.clear()
         session.update(revision=account["revision"])
         session.permanent = True

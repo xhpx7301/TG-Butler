@@ -14,10 +14,10 @@ if [[ ! -f /etc/systemd/system/tg-butler-web.service ]]; then
     install -m 644 "$INSTALL_DIR/deploy/tg-butler-web.service" /etc/systemd/system/tg-butler-web.service
 fi
 # Shared SQLite ownership must stay with the unprivileged service account.
-runuser -u tgbutler -- "$INSTALL_DIR/.venv/bin/python" -c \
-    'from pathlib import Path; from tg_butler.admin import AdminStore; AdminStore(Path("/opt/tg-butler"))'
+runuser -u tgbutler -- "$INSTALL_DIR/.venv/bin/python" -m tg_butler.admin \
+    initialize --root "$INSTALL_DIR"
 systemctl daemon-reload
 # Enable monitoring on boot; it can be configured and started later from the website.
 systemctl enable tg-butler.service
 systemctl enable --now tg-butler-web.service
-printf '网页后台已安装：默认 127.0.0.1:15678。请在 bu → 22 创建管理员。\n'
+printf '网页后台已启动并设为开机自启：默认 127.0.0.1:15678。管理员可在网页或 bu → 1 网页后台 → 2 管理员账户 修改。\n'

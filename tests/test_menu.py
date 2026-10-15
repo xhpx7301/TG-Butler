@@ -168,12 +168,61 @@ def test_failed_update_does_not_claim_success_or_exit(menu, monkeypatch, capsys)
 
 
 def test_menu_dispatch_and_exit(menu, monkeypatch, capsys):
-    answer(monkeypatch, ["invalid", "9", "0"])
+    answer(monkeypatch, ["invalid", "5", "2", "0", "0"])
     menu.loop()
     output = capsys.readouterr().out
     assert "无效选项" in output
     assert "中文管理菜单" in output
     assert "保留：30 天" in output
+
+
+def test_home_is_compact_and_distinguishes_web_from_monitor(menu, monkeypatch, capsys):
+    menu.active.side_effect = lambda service=None: service == "tg-butler-web.service"
+    answer(monkeypatch, ["0"])
+    menu.loop()
+    output = capsys.readouterr().out
+    assert "网页后台：运行中 │ 监控任务：未运行" in output
+    assert "6. 更新脚本" in output
+    assert "API ID / HASH" not in output
+    assert "25." not in output
+    menu.command.assert_not_called()
+
+
+def test_web_start_from_submenu_needs_no_telegram_credentials(menu, monkeypatch):
+    answer(monkeypatch, ["1", "4", "0", "0"])
+    menu.cli = Mock()
+    menu.loop()
+    menu.command.assert_called_once_with(["bash", str(menu.root / "deploy/setup-web.sh")])
+    menu.cli.assert_not_called()
+    assert not (menu.root / ".env").exists()
+
+
+def test_failed_monitor_start_stays_in_submenu_and_allows_return(menu, monkeypatch, capsys):
+    menu.cli = Mock(side_effect=subprocess.CalledProcessError(1, ["check-config"]))
+    answer(monkeypatch, ["4", "1", "0", "1", "1", "0", "0"])
+    menu.loop()
+    menu.cli.assert_called_once_with("check-config")
+    menu.command.assert_not_called()
+    output = capsys.readouterr().out
+    assert "操作未完成" in output
+    assert "http://127.0.0.1:15678" in output
+
+
+def test_web_access_uses_saved_port(menu, capsys):
+    (menu.root / "data").mkdir(exist_ok=True)
+    (menu.root / "data/web.json").write_text('{"port": 23456}', encoding="utf-8")
+    menu.web_access()
+    output = capsys.readouterr().out
+    assert "23456:127.0.0.1:23456" in output
+    assert "http://127.0.0.1:23456" in output
+
+
+@pytest.mark.parametrize("choice", ["6", "19"])
+def test_update_exits_to_load_new_menu(menu, monkeypatch, choice):
+    menu.update = Mock(return_value=True)
+    answer(monkeypatch, [choice])
+    menu.loop()
+    menu.update.assert_called_once_with()
 
 
 def test_menu_overview_does_not_read_or_display_credentials(menu, capsys):

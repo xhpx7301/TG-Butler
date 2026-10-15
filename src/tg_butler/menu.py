@@ -159,10 +159,10 @@ class Menu:
     def command(self, args: list[str], *, check: bool = True):
         return subprocess.run(args, check=check)  # No shell; typed values stay arguments.
 
-    def active(self) -> bool:
+    def active(self, service: str = SERVICE) -> bool:
         return (
             subprocess.run(
-                ["systemctl", "is-active", "--quiet", SERVICE],
+                ["systemctl", "is-active", "--quiet", service],
                 check=False,
             ).returncode
             == 0
@@ -473,72 +473,152 @@ class Menu:
             ]
         )
         self.command(["systemctl", "restart", "tg-butler-web.service"])
-        print("网页后台已重启。SSH 隧道示例：ssh -L 15678:127.0.0.1:15678 用户@服务器")
+        print("网页后台已重启。")
+        self.web_access()
+
+    def web_access(self) -> None:
+        from tg_butler.admin import web_options
+
+        options = web_options(self.root)
+        port = int(options["port"])
+        target = "[::1]" if ":" in options["host"] else "127.0.0.1"
+        print(f"\n网页监听：{options['host']}:{port}")
+        print(f"电脑建立 SSH 隧道：ssh -N -L {port}:{target}:{port} 用户@服务器")
+        print(f"电脑浏览器访问：http://127.0.0.1:{port}")
+        if options["secure_cookie"]:
+            print("已启用 HTTPS Cookie，请通过已配置的 HTTPS 代理域名登录。")
+        print("首次默认账号：pingzi / pingzi；已有账户保留，修改或重置请进入“管理员账户”。")
+
+    def members(self) -> None:
+        chat_id = str(int(ask("群组数字 ID")))
+        self.cli("members", "--limit", "100", chat_id, session=True)
+
+    def manual_summary(self) -> None:
+        day = ask("日报日期（YYYY-MM-DD；同群同日仅尝试一次）")
+        self.cli("summary", "--date", day, session=True)
+
+    def restart_service(self) -> None:
+        self.cli("check-config")
+        self.command(["systemctl", "restart", SERVICE])
+
+    def menu_sections(self) -> dict:
+        return {
+            "1": (
+                "网页后台",
+                [
+                    ("查看访问地址与登录说明", self.web_access),
+                    ("管理员账户（修改 / 重置）", self.web_admin),
+                    ("监听地址、端口与 HTTPS Cookie", self.web_settings),
+                    (
+                        "安装 / 启动网页后台（开机自启）",
+                        lambda: self.command(["bash", str(self.root / "deploy/setup-web.sh")]),
+                    ),
+                    (
+                        "查看网页后台状态",
+                        lambda: self.command(
+                            ["systemctl", "--no-pager", "status", "tg-butler-web.service"],
+                            check=False,
+                        ),
+                    ),
+                    (
+                        "查看网页后台日志",
+                        lambda: self.command(
+                            ["journalctl", "-u", "tg-butler-web.service", "-n", "80", "--no-pager"]
+                        ),
+                    ),
+                ],
+            ),
+            "2": (
+                "Telegram 配置",
+                [
+                    ("账号应用凭据（API ID / HASH）", self.credentials),
+                    ("登录 Telegram 账号", lambda: self.cli("login", session=True)),
+                    ("通知机器人（Token / 接收用户 ID）", self.notification_credentials),
+                    ("测试机器人通知", lambda: self.cli("notify-test")),
+                    ("查看群组 ID", lambda: self.cli("dialogs", session=True)),
+                    ("查看群成员 ID", self.members),
+                ],
+            ),
+            "3": (
+                "监控任务",
+                [
+                    ("群组与关注用户管理", self.groups),
+                    ("日报与 AI 摘要设置", self.summary),
+                    ("AI 摘要密钥（可选）", self.ai_credentials),
+                    ("定时签到任务管理", self.checkins),
+                    ("手动发送指定日期日报", self.manual_summary),
+                    ("查看任务执行记录", lambda: self.cli("status")),
+                ],
+            ),
+            "4": (
+                "监控服务与日志",
+                [
+                    ("启动监控任务 / 开机自启（需完成 Telegram 配置）", self.start_service),
+                    ("停止监控任务", lambda: self.command(["systemctl", "stop", SERVICE])),
+                    ("重启监控任务", self.restart_service),
+                    (
+                        "查看监控服务状态",
+                        lambda: self.command(
+                            ["systemctl", "--no-pager", "--full", "status", SERVICE], check=False
+                        ),
+                    ),
+                    (
+                        "查看监控服务日志",
+                        lambda: self.command(
+                            ["journalctl", "-u", SERVICE, "-n", "80", "--no-pager"]
+                        ),
+                    ),
+                ],
+            ),
+            "5": (
+                "运行参数与配置检查",
+                [
+                    ("时区、保留天数与通知队列", self.basic),
+                    ("查看当前配置（隐藏密钥）", self.overview),
+                    ("校验监控配置", lambda: self.cli("check-config")),
+                ],
+            ),
+        }
 
     def loop(self) -> None:
+        section = None
         while True:
-            print("\n══════════ TG-Butler 中文管理菜单 ══════════")
-            print(f"服务：{'运行中' if self.active() else '未运行'}")
-            print(
-                " 1. Telegram 账号应用凭据（API ID / HASH）\n 2. 登录 Telegram 账号\n"
-                " 3. 查看群组 ID\n 4. 查看群成员 ID\n 5. 群组与关注用户管理\n"
-                " 6. 日报与 AI 摘要设置\n 7. 定时签到任务管理\n 8. 时区、保留天数与通知队列\n"
-                " 9. 查看当前配置（隐藏密钥）\n10. 校验配置\n11. 测试机器人通知\n"
-                "12. 启动服务 / 开机启动\n13. 停止服务\n14. 重启服务\n"
-                "15. 查看服务状态\n16. 查看最近日志\n17. 查看任务执行记录\n"
-                "18. 手动发送指定日期日报\n19. 更新脚本\n"
-                "20. 通知机器人设置（Token / 接收用户 ID）\n21. AI 摘要密钥\n"
-                "22. 网页管理员账户（创建 / 修改 / 重置）\n23. 网页地址与端口设置\n"
-                "24. 安装 / 启动网页后台\n25. 查看网页后台状态\n 0. 退出"
-            )
             try:
+                sections = self.menu_sections()
+                print("\n══════════ TG-Butler 中文管理菜单 ══════════")
+                web_state = "运行中" if self.active("tg-butler-web.service") else "未运行"
+                print(
+                    f"网页后台：{web_state} │ 监控任务：{'运行中' if self.active() else '未运行'}"
+                )
+                if section is None:
+                    print("推荐在网页完成配置；网页后台无需 Telegram 凭据即可运行。")
+                    for key, (title, _) in sections.items():
+                        print(f" {key}. {title}")
+                    print(" 6. 更新脚本\n 0. 退出")
+                else:
+                    title, entries = sections[section]
+                    print(f"\n【{title}】")
+                    for index, (label, _) in enumerate(entries, 1):
+                        print(f" {index}. {label}")
+                    print(" 0. 返回主菜单")
                 choice = input("请输入选项：").strip()
-                actions = {
-                    "1": self.credentials,
-                    "20": self.notification_credentials,
-                    "21": self.ai_credentials,
-                    "22": self.web_admin,
-                    "23": self.web_settings,
-                    "24": lambda: self.command(["bash", str(self.root / "deploy/setup-web.sh")]),
-                    "25": lambda: self.command(
-                        ["systemctl", "--no-pager", "status", "tg-butler-web.service"], check=False
-                    ),
-                    "2": lambda: self.cli("login", session=True),
-                    "3": lambda: self.cli("dialogs", session=True),
-                    "5": self.groups,
-                    "6": self.summary,
-                    "7": self.checkins,
-                    "8": self.basic,
-                    "9": self.overview,
-                    "10": lambda: self.cli("check-config"),
-                    "11": lambda: self.cli("notify-test"),
-                    "12": self.start_service,
-                    "13": lambda: self.command(["systemctl", "stop", SERVICE]),
-                    "14": lambda: (
-                        self.cli("check-config"),
-                        self.command(["systemctl", "restart", SERVICE]),
-                    ),
-                    "15": lambda: self.command(
-                        ["systemctl", "--no-pager", "--full", "status", SERVICE], check=False
-                    ),
-                    "16": lambda: self.command(
-                        ["journalctl", "-u", SERVICE, "-n", "80", "--no-pager"]
-                    ),
-                    "17": lambda: self.cli("status"),
-                }
                 if choice == "0":
-                    return
-                if choice == "4":
-                    chat_id = str(int(ask("群组数字 ID")))
-                    self.cli("members", "--limit", "100", chat_id, session=True)
-                elif choice == "18":
-                    day = ask("日报日期（YYYY-MM-DD；同群同日仅尝试一次）")
-                    self.cli("summary", "--date", day, session=True)
-                elif choice == "19":
+                    if section is None:
+                        return
+                    section = None
+                elif section is None and choice in sections:
+                    section = choice
+                elif section is None and choice in {"6", "19"}:
                     if self.update():
                         return
-                elif choice in actions:
-                    actions[choice]()
+                elif section is None and choice in {"22", "23", "24", "25"}:
+                    # Keep the previous release's documented web shortcuts working.
+                    legacy = {"22": 1, "23": 2, "24": 3, "25": 4}
+                    sections["1"][1][legacy[choice]][1]()
+                elif section is not None and choice in {
+                    str(index) for index in range(1, len(sections[section][1]) + 1)
+                }:
+                    sections[section][1][int(choice) - 1][1]()
                 else:
                     print("无效选项。")
             except ValidationError as exc:

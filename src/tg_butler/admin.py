@@ -47,6 +47,18 @@ class AdminStore:
             row = db.execute("SELECT * FROM admin WHERE id=1").fetchone()
         return dict(row) if row else None
 
+    def initialize_default(self) -> bool:
+        """Create the initial account once, preserving existing credentials and sessions."""
+        if self.get():
+            return False
+        encoded = generate_password_hash("pingzi", method="scrypt")
+        with self.connect() as db:
+            result = db.execute(
+                "INSERT OR IGNORE INTO admin VALUES (1, ?, ?, ?)",
+                ("pingzi", encoded, secrets.token_hex(24)),
+            )
+            return result.rowcount == 1
+
     def secret(self) -> str:
         with self.connect() as db:
             db.execute(
@@ -127,16 +139,22 @@ def main():
     from tg_butler.menu import ask, ask_bool, atomic_write
 
     parser = argparse.ArgumentParser(description="网页管理员与监听设置")
-    parser.add_argument("action", choices=["account", "settings"])
+    parser.add_argument("action", choices=["account", "settings", "initialize"])
     parser.add_argument("--root", type=Path, default=Path("/opt/tg-butler"))
     args = parser.parse_args()
     os.umask(0o077)
     try:
         store = AdminStore(args.root)
-        if args.action == "account":
+        if args.action == "initialize":
+            if store.initialize_default():
+                print("已创建默认管理员：用户名 pingzi，密码 pingzi。")
+                print("修改账户：网页管理员设置，或 bu → 1 网页后台 → 2 管理员账户。")
+            else:
+                print("已有管理员账户，保留原用户名和密码。")
+        elif args.action == "account":
             current = store.get()
             print("设置网页唯一管理员；保存后全部网页登录会话失效。忘记密码可在此重置。")
-            username = ask("管理员用户名", current["username"] if current else "admin")
+            username = ask("管理员用户名", current["username"] if current else "pingzi")
             password = getpass.getpass("新管理员密码（12–256 字符）：")
             confirm = getpass.getpass("再次输入新密码：")
             if password != confirm:
