@@ -107,7 +107,7 @@ class AdminStore:
 
 def web_options(root: Path) -> dict:
     path = root / "data" / "web.json"
-    defaults = {"host": "127.0.0.1", "port": 8080, "secure_cookie": False}
+    defaults = {"host": "127.0.0.1", "port": 15678, "secure_cookie": False}
     if path.exists():
         defaults.update(json.loads(path.read_text(encoding="utf-8")))
     # Values are used as arguments, never shell command text.

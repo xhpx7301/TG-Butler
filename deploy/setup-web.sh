@@ -20,4 +20,4 @@ systemctl daemon-reload
 # Enable monitoring on boot; it can be configured and started later from the website.
 systemctl enable tg-butler.service
 systemctl enable --now tg-butler-web.service
-printf '网页后台已安装：默认 127.0.0.1:8080。请在 bu → 22 创建管理员。\n'
+printf '网页后台已安装：默认 127.0.0.1:15678。请在 bu → 22 创建管理员。\n'

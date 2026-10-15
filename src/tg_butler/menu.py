@@ -473,7 +473,7 @@ class Menu:
             ]
         )
         self.command(["systemctl", "restart", "tg-butler-web.service"])
-        print("网页后台已重启。SSH 隧道示例：ssh -L 8080:127.0.0.1:8080 用户@服务器")
+        print("网页后台已重启。SSH 隧道示例：ssh -L 15678:127.0.0.1:15678 用户@服务器")
 
     def loop(self) -> None:
         while True:
