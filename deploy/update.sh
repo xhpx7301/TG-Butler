@@ -41,6 +41,9 @@ main() {
         systemctl stop tg-butler.service
         STOPPED=1
     fi
+    if systemctl is-active --quiet tg-butler-web.service; then
+        systemctl stop tg-butler-web.service
+    fi
     as_user git -C "$INSTALL_DIR" merge --ff-only origin/main
     as_user "$INSTALL_DIR/.venv/bin/pip" install --upgrade "$INSTALL_DIR"
     install -m 755 "$INSTALL_DIR/deploy/bu" /usr/local/bin/bu
@@ -51,6 +54,8 @@ main() {
         printf '新版服务模板保存为 /etc/systemd/system/tg-butler.service.new；现有服务文件保留。\n'
     fi
     systemctl daemon-reload
+    bash "$INSTALL_DIR/deploy/setup-web.sh"
+    systemctl restart tg-butler-web.service
     if [[ "$WAS_ACTIVE" -eq 1 ]]; then
         systemctl reset-failed tg-butler.service
         systemctl start tg-butler.service

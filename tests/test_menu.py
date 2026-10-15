@@ -264,3 +264,20 @@ def test_full_validation_rejects_both_placeholder_types(menu, key, value):
     values[key] = value
     with pytest.raises(ValidationError):
         save_credentials(menu.root / ".env", values)
+
+
+def test_menu_refuses_to_overwrite_configuration_changed_by_web(menu, monkeypatch):
+    data = menu.read()
+    changed = data | {"retention_days": 10}
+    save_settings(menu.config, changed)
+    with pytest.raises(ValueError, match="配置已被网页"):
+        menu.save(data)
+    assert menu.read()["retention_days"] == 10
+
+
+def test_menu_admin_management_runs_as_service_account(menu):
+    menu.web_admin()
+    args = menu.command.call_args.args[0]
+    assert args[:4] == ["runuser", "-u", "tgbutler", "--"]
+    assert "tg_butler.admin" in args
+    assert "account" in args

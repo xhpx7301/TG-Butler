@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import copy
 import getpass
+import hashlib
 import os
 import subprocess
 import sys
@@ -14,6 +15,7 @@ from pathlib import Path
 
 import yaml
 from dotenv import dotenv_values, set_key
+from filelock import FileLock, Timeout
 from pydantic import ValidationError
 
 from tg_butler.config import (
@@ -45,13 +47,41 @@ def atomic_write(path: Path, content: str) -> None:
         Path(temporary).unlink(missing_ok=True)
 
 
-def save_settings(path: Path, data: dict) -> None:
+@contextmanager
+def configuration_lock(path: Path):
+    directory = path.parent / "data"
+    directory.mkdir(parents=True, exist_ok=True)
+    lock_path = directory / "config.lock"
+    try:
+        fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+    except FileExistsError:
+        pass
+    else:
+        os.close(fd)
+        if os.name != "nt":
+            owner = path.stat() if path.exists() else path.parent.stat()
+            os.chown(lock_path, owner.st_uid, owner.st_gid)
+    with FileLock(str(lock_path), timeout=2):
+        yield
+
+
+def save_settings(path: Path, data: dict, *, expected_revision=None, locked=False) -> None:
+    if not locked:
+        with configuration_lock(path):
+            return save_settings(path, data, expected_revision=expected_revision, locked=True)
+    if expected_revision and hashlib.sha256(path.read_bytes()).hexdigest() != expected_revision:
+        raise ValueError("配置已被网页或其他菜单修改，请重新进入此项后再保存")
     Settings.model_validate(data)
     # Validate without serializing the model: keep relative data_dir and optional defaults.
     atomic_write(path, yaml.safe_dump(data, allow_unicode=True, sort_keys=False))
 
 
-def save_credentials(path: Path, values: dict[str, str], section: str = "all") -> None:
+def save_credentials(
+    path: Path, values: dict[str, str], section: str = "all", *, locked=False
+) -> None:
+    if not locked:
+        with configuration_lock(path):
+            return save_credentials(path, values, section, locked=True)
     if section not in {"all", "application", "notification", "ai"}:
         raise ValueError("Unknown credential section")
     if section == "application":
@@ -117,10 +147,14 @@ class Menu:
         self.root = self.config.parent
 
     def read(self) -> dict:
-        with self.config.open(encoding="utf-8") as handle:
-            data = yaml.safe_load(handle) or {}
+        content = self.config.read_bytes()
+        self._config_revision = hashlib.sha256(content).hexdigest()
+        data = yaml.safe_load(content.decode("utf-8")) or {}
         Settings.model_validate(data)
         return data
+
+    def save(self, data):
+        save_settings(self.config, data, expected_revision=self._config_revision)
 
     def command(self, args: list[str], *, check: bool = True):
         return subprocess.run(args, check=check)  # No shell; typed values stay arguments.
@@ -143,6 +177,18 @@ class Menu:
 
     @contextmanager
     def paused(self):
+        (self.root / "data").mkdir(parents=True, exist_ok=True)
+        lock_path = self.root / "data/telegram.lock"
+        lock_path.touch(exist_ok=True)
+        if os.name != "nt":
+            owner = self.config.stat()
+            os.chown(lock_path, owner.st_uid, owner.st_gid)
+        with FileLock(str(self.root / "data/telegram.lock"), timeout=2):
+            with self._paused():
+                yield
+
+    @contextmanager
+    def _paused(self):
         was_active = self.active()
         if was_active:
             print("临时停止服务，避免共用 Telegram 登录会话。")
@@ -273,7 +319,7 @@ class Menu:
                 records.append(record)
             else:
                 records[index] = record
-        save_settings(self.config, data)
+        self.save(data)
         self.apply()
 
     def summary(self) -> None:
@@ -296,7 +342,7 @@ class Menu:
         record["max_chars"] = int(
             ask("AI 最多输入字符数（1000-200000）", record.get("max_chars", 30000))
         )
-        save_settings(self.config, data)
+        self.save(data)
         self.apply()
 
     def checkins(self) -> None:
@@ -346,7 +392,7 @@ class Menu:
                 records.append(record)
             else:
                 records[index] = record
-        save_settings(self.config, data)
+        self.save(data)
         self.apply()
 
     def basic(self) -> None:
@@ -357,7 +403,7 @@ class Menu:
         notifications["queue_size"] = int(
             ask("实时通知队列容量（1-10000）", notifications.get("queue_size", 500))
         )
-        save_settings(self.config, data)
+        self.save(data)
         self.apply()
 
     def overview(self) -> None:
@@ -390,9 +436,44 @@ class Menu:
         print("更新将拉取 GitHub main、安装依赖并更新菜单和服务文件。配置和数据保留。")
         if not ask_bool("现在更新脚本", True):
             return False
+        # Stop the web manager during package replacement and credential/schema updates.
         self.command(["bash", str(self.root / "deploy/update.sh")])
         print("更新完成。请输入 bu 重新进入新版菜单。")
         return True
+
+    def web_admin(self) -> None:
+        self.command(
+            [
+                "runuser",
+                "-u",
+                "tgbutler",
+                "--",
+                str(self.root / ".venv/bin/python"),
+                "-m",
+                "tg_butler.admin",
+                "account",
+                "--root",
+                str(self.root),
+            ]
+        )
+
+    def web_settings(self) -> None:
+        self.command(
+            [
+                "runuser",
+                "-u",
+                "tgbutler",
+                "--",
+                str(self.root / ".venv/bin/python"),
+                "-m",
+                "tg_butler.admin",
+                "settings",
+                "--root",
+                str(self.root),
+            ]
+        )
+        self.command(["systemctl", "restart", "tg-butler-web.service"])
+        print("网页后台已重启。SSH 隧道示例：ssh -L 8080:127.0.0.1:8080 用户@服务器")
 
     def loop(self) -> None:
         while True:
@@ -406,7 +487,9 @@ class Menu:
                 "12. 启动服务 / 开机启动\n13. 停止服务\n14. 重启服务\n"
                 "15. 查看服务状态\n16. 查看最近日志\n17. 查看任务执行记录\n"
                 "18. 手动发送指定日期日报\n19. 更新脚本\n"
-                "20. 通知机器人设置（Token / 接收用户 ID）\n21. AI 摘要密钥\n 0. 退出"
+                "20. 通知机器人设置（Token / 接收用户 ID）\n21. AI 摘要密钥\n"
+                "22. 网页管理员账户（创建 / 修改 / 重置）\n23. 网页地址与端口设置\n"
+                "24. 安装 / 启动网页后台\n25. 查看网页后台状态\n 0. 退出"
             )
             try:
                 choice = input("请输入选项：").strip()
@@ -414,6 +497,12 @@ class Menu:
                     "1": self.credentials,
                     "20": self.notification_credentials,
                     "21": self.ai_credentials,
+                    "22": self.web_admin,
+                    "23": self.web_settings,
+                    "24": lambda: self.command(["bash", str(self.root / "deploy/setup-web.sh")]),
+                    "25": lambda: self.command(
+                        ["systemctl", "--no-pager", "status", "tg-butler-web.service"], check=False
+                    ),
                     "2": lambda: self.cli("login", session=True),
                     "3": lambda: self.cli("dialogs", session=True),
                     "5": self.groups,
@@ -459,6 +548,8 @@ class Menu:
                 print("输入无效，配置未保存。请检查数字、日期、时区和正则格式。")
             except subprocess.CalledProcessError:
                 print("操作未完成，请检查上方错误；可用菜单查看日志后重试。")
+            except Timeout:
+                print("其他菜单或网页正在使用 Telegram 会话，请稍后重试。")
             except OSError as exc:
                 print(f"文件或系统操作失败（{type(exc).__name__}），请检查权限与磁盘空间。")
             except yaml.YAMLError:

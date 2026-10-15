@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tg-butler"
-version = "0.1.0"
+version = "0.2.0"
 description = "Telegram group monitoring, daily digests and scheduled check-ins"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -16,6 +16,9 @@ dependencies = [
   "PyYAML>=6,<7",
   "python-dotenv>=1,<2",
   "tzdata>=2024.1",
+  "Flask>=3.1,<4",
+  "waitress>=3,<4",
+  "filelock>=3.16,<4",
 ]
 
 [project.optional-dependencies]
@@ -23,9 +26,13 @@ dev = ["pytest>=8,<9", "pytest-asyncio>=0.24,<1", "ruff>=0.9,<1"]
 
 [project.scripts]
 tg-butler = "tg_butler.cli:main"
+tg-butler-web = "tg_butler.web:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+tg_butler = ["templates/*.html", "static/*.css", "static/*.js"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

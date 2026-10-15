@@ -2,3 +2,4 @@
 * text=auto
 *.sh text eol=lf
 deploy/bu text eol=lf
+deploy/web-sudoers text eol=lf

@@ -11,10 +11,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: bash -n deploy/install.sh && bash -n deploy/update.sh && bash -n deploy/bu
-      - run: shellcheck deploy/install.sh deploy/update.sh deploy/bu
+      - run: for script in deploy/*.sh deploy/bu; do bash -n "$script"; done
+      - run: shellcheck deploy/*.sh deploy/bu
+      - run: sudo visudo -cf deploy/web-sudoers
       - run: bash deploy/install.sh --help
       - run: bash deploy/update.sh --help && bash deploy/bu --help
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: node --check src/tg_butler/static/app.js
 
   test:
     runs-on: ubuntu-latest

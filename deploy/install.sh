@@ -16,7 +16,7 @@ usage() {
 TG-Butler Debian 一键安装
 用法：sudo bash deploy/install.sh [--non-interactive]
   默认：安装后进入 bu 中文管理菜单，填写参数、登录 Telegram 并管理服务。
-  --non-interactive：仅安装环境和服务文件，保留现有配置，不登录或启动服务。
+  --non-interactive：安装环境并启动网页，保留现有配置，不登录或启动监控任务。
   --help：显示此帮助。
 支持 Debian 12 / 13、Python 3.11+、运行中的 systemd。重复执行保留配置和 data/。
 HELP
@@ -105,13 +105,15 @@ main() {
         /etc/systemd/system/tg-butler.service
     install -m 755 "$INSTALL_DIR/deploy/bu" /usr/local/bin/bu
     systemctl daemon-reload
+    bash "$INSTALL_DIR/deploy/setup-web.sh"
     if [[ "$NON_INTERACTIVE" -eq 1 ]]; then
-        printf '\n环境已安装，服务尚未启动。现有配置与 data/ 已保留。\n'
-        printf '输入 bu 打开中文菜单，继续配置、登录并启动服务。\n'
+        printf '\n环境已安装，网页已启动，监控任务尚未启动。现有配置与 data/ 已保留。\n'
+        printf '输入 bu → 22 创建管理员，再通过 SSH 隧道打开网页。\n'
         return 0
     fi
 
     printf '\n[5/5] 安装完成，进入 bu 中文管理菜单\n' >&3
+    printf '推荐选择 22 创建网页管理员，通过 SSH 隧道访问本机 8080，在网页完成其余配置。\n' >&3
     printf '首次使用：1 填写应用凭据、2 登录、3 查看群组、5 配置监控、20 配置通知机器人、11 测试通知、12 启动。\n' >&3
     printf '以后直接输入 bu 即可管理；选择 0 退出不会停止正在运行的服务。\n' >&3
     /usr/local/bin/bu <&3 >&3 2>&3
