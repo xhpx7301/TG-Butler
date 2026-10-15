@@ -1,0 +1,15 @@
+.env
+config.yaml
+data/
+*.session
+*.session-journal
+*.sqlite*
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+build/
+dist/
+work/

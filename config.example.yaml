@@ -1,0 +1,38 @@
+timezone: Asia/Shanghai
+data_dir: data
+retention_days: 30
+
+notifications:
+  # A bounded queue prevents live alerts from blocking Telegram message collection.
+  queue_size: 500
+
+summary:
+  enabled: true
+  at: "00:05" # Summarizes the previous calendar day in the configured timezone.
+  # Without a provider, sends a local digest with counts and message excerpts.
+  api_url: null # Example: https://your-provider.example/v1/chat/completions
+  model: null
+  max_messages: 500
+  max_chars: 30000
+
+groups:
+  - id: -1001234567890
+    name: 示例群组
+    daily_summary: true
+    notify_all: false
+    watch_users: [123456789] # Numeric Telegram user IDs; empty means no user alerts.
+
+checkins: []
+# To enable check-ins, replace the empty list above with:
+# checkins:
+#   - name: 每日签到
+#     chat_id: -1001234567890
+#     at: "09:00"
+#     command: "/checkin"
+#     responder_id: 987654321 # The numeric ID of the group's check-in bot.
+#     success_pattern: "签到成功|已经签到|已签到"
+#     failure_pattern: "签到失败|无权限"
+#     timeout_seconds: 60
+#     require_reply: true # Match only a reply to the command just sent.
+# If the group's bot never uses reply-to, set require_reply to false explicitly.
+# Then confirmation matches responder + time window + pattern, and is less precise.

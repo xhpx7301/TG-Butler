@@ -1,0 +1,29 @@
+[Unit]
+Description=TG-Butler Telegram group assistant
+Wants=network-online.target
+After=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=tgbutler
+Group=tgbutler
+WorkingDirectory=/opt/tg-butler
+ExecStart=/opt/tg-butler/.venv/bin/tg-butler --config /opt/tg-butler/config.yaml run
+Restart=always
+RestartSec=15
+TimeoutStopSec=30
+KillSignal=SIGINT
+UMask=0077
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/tg-butler/data
+RestrictSUIDSGID=true
+
+[Install]
+WantedBy=multi-user.target
