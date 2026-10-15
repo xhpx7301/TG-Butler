@@ -183,6 +183,7 @@ def test_home_is_compact_and_distinguishes_web_from_monitor(menu, monkeypatch, c
     output = capsys.readouterr().out
     assert "网页后台：运行中 │ 监控任务：未运行" in output
     assert "6. 更新脚本" in output
+    assert "7. 卸载并清除数据" in output
     assert "API ID / HASH" not in output
     assert "25." not in output
     menu.command.assert_not_called()
@@ -223,6 +224,32 @@ def test_update_exits_to_load_new_menu(menu, monkeypatch, choice):
     answer(monkeypatch, [choice])
     menu.loop()
     menu.update.assert_called_once_with()
+
+
+def test_uninstall_success_exits_menu_without_loading_deleted_files(menu, monkeypatch):
+    menu.config.unlink()  # Uninstall must also work with a missing/broken configuration.
+    menu.command.return_value = subprocess.CompletedProcess(["bash"], 0)
+    answer(monkeypatch, ["7"])
+    menu.loop()
+    menu.command.assert_called_once_with(
+        ["bash", str(menu.root / "deploy/uninstall.sh")], check=False
+    )
+
+
+def test_cancelled_uninstall_returns_to_menu(menu, monkeypatch, capsys):
+    menu.command.return_value = subprocess.CompletedProcess(["bash"], 2)
+    answer(monkeypatch, ["7", "0"])
+    menu.loop()
+    assert capsys.readouterr().out.count("中文管理菜单") == 2
+
+
+def test_failed_uninstall_reports_error_and_keeps_menu(menu, monkeypatch, capsys):
+    menu.command.return_value = subprocess.CompletedProcess(["bash"], 1)
+    answer(monkeypatch, ["7", "0"])
+    menu.loop()
+    output = capsys.readouterr().out
+    assert "操作未完成" in output
+    assert output.count("中文管理菜单") == 2
 
 
 def test_menu_overview_does_not_read_or_display_credentials(menu, capsys):

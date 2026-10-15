@@ -441,6 +441,13 @@ class Menu:
         print("更新完成。请输入 bu 重新进入新版菜单。")
         return True
 
+    def uninstall(self) -> bool:
+        result = self.command(["bash", str(self.root / "deploy/uninstall.sh")], check=False)
+        if result.returncode == 2:  # Explicit cancellation in the interactive script.
+            return False
+        result.check_returncode()
+        return True
+
     def web_admin(self) -> None:
         self.command(
             [
@@ -594,7 +601,7 @@ class Menu:
                     print("推荐在网页完成配置；网页后台无需 Telegram 凭据即可运行。")
                     for key, (title, _) in sections.items():
                         print(f" {key}. {title}")
-                    print(" 6. 更新脚本\n 0. 退出")
+                    print(" 6. 更新脚本\n 7. 卸载并清除数据\n 0. 退出")
                 else:
                     title, entries = sections[section]
                     print(f"\n【{title}】")
@@ -610,6 +617,9 @@ class Menu:
                     section = choice
                 elif section is None and choice in {"6", "19"}:
                     if self.update():
+                        return
+                elif section is None and choice == "7":
+                    if self.uninstall():
                         return
                 elif section is None and choice in {"22", "23", "24", "25"}:
                     # Keep the previous release's documented web shortcuts working.

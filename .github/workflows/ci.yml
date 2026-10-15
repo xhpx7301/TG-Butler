@@ -16,6 +16,7 @@ jobs:
       - run: sudo visudo -cf deploy/web-sudoers
       - run: bash deploy/install.sh --help
       - run: bash deploy/update.sh --help && bash deploy/bu --help
+      - run: bash deploy/uninstall.sh --help
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
