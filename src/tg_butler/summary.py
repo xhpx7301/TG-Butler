@@ -260,3 +260,28 @@ async def send_daily(
         except Exception as exc:
             store.finish("summary", name, stamp, "failed", type(exc).__name__)
             log.error("Daily summary delivery failed for %s (%s)", name, type(exc).__name__)
+
+
+async def send_test_daily(
+    settings: Settings,
+    store: Store,
+    notifier: Notifier,
+    day: date,
+    api_key: str = "",
+) -> int:
+    """Build and send a preview without claiming or recording a scheduled run."""
+    start, end = day_bounds(day, settings.timezone)
+    sent = 0
+    for group in settings.groups:
+        if not group.daily_summary:
+            continue
+        digest = await build_digest(
+            settings,
+            group,
+            day,
+            store.messages(group.id, start, end),
+            api_key,
+        )
+        await notifier.send(digest)
+        sent += 1
+    return sent

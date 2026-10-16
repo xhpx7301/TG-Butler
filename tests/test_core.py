@@ -17,6 +17,7 @@ from tg_butler.summary import (
     completion_urls,
     day_bounds,
     send_daily,
+    send_test_daily,
 )
 
 
@@ -187,6 +188,14 @@ async def test_summary_failure_is_recorded_and_other_groups_continue(store):
     await send_daily(settings, store, notifier, date(2026, 10, 15))
     assert notifier.send.await_count == 2
     assert {row["name"]: row["status"] for row in store.runs()} == {"1": "failed", "2": "sent"}
+
+
+async def test_test_daily_sends_without_claiming_a_run(store):
+    settings = Settings(groups=[Group(id=1), Group(id=2, daily_summary=False)])
+    notifier = FakeNotifier()
+    assert await send_test_daily(settings, store, notifier, date(2026, 10, 15)) == 1
+    assert notifier.send.await_count == 1
+    assert store.runs() == []
 
 
 async def test_ai_failure_returns_honest_local_fallback(monkeypatch):

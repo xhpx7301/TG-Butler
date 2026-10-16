@@ -201,6 +201,25 @@ def test_ai_models_can_use_saved_key_and_reject_missing_model(web, monkeypatch):
     assert "模型名称" in response.json["error"]
 
 
+def test_summary_test_sends_preview_without_recording_run(web, monkeypatch):
+    app, config, _ = web
+    client = app.test_client()
+    headers = authenticate(client)
+    save_settings(config, {"groups": [{"id": 1}], "checkins": [], "data_dir": "data"})
+
+    class FakeNotifier:
+        async def close(self):
+            pass
+
+    monkeypatch.setattr("tg_butler.app.make_notifier", lambda settings, credentials: FakeNotifier())
+    send = AsyncMock(return_value=1)
+    monkeypatch.setattr("tg_butler.web.send_test_daily", send)
+    response = client.post("/api/summary-test", json={}, headers=headers)
+    assert response.status_code == 200
+    assert "测试日报已发送" in response.json["message"]
+    send.assert_awaited_once()
+
+
 def test_password_validation_and_hash_storage(tmp_path):
     store = AdminStore(tmp_path)
     assert store.get() is None

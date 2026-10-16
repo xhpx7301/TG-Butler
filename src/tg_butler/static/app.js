@@ -70,6 +70,7 @@ bindButton("dialogs",async()=>showItems((await api("telegram/dialogs",{})).items
 bindButton("notify-test",async()=>toast((await api("notify-test",{})).message));
 bindButton("fetch-models",async()=>showModels((await api("ai/models",aiFormValues())).models));
 bindButton("test-ai",async()=>toast((await api("ai/test",aiFormValues())).message));
+bindButton("test-summary",async()=>{if(!confirm("将发送前一天的测试日报到通知机器人，且不会记录为正式日报。继续吗？"))return;toast((await api("summary-test",{})).message);});
 $("summary-model-select").addEventListener("change",event=>$("summary-model-manual").value=event.target.value);
 bindButton("add-group",()=>addGroup());bindButton("add-checkin",()=>addCheckin());
 bindButton("save-groups",()=>saveConfig(config=>config.groups=records("group-list").map(row=>({...row,id:integer(row.id,"群组 ID"),watch_users:row.watch_users.replaceAll("，",",").split(",").filter(x=>x.trim()).map(x=>integer(x.trim(),"关注用户 ID"))}))));

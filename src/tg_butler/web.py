@@ -5,9 +5,10 @@ import hashlib
 import os
 import secrets
 import subprocess
-from datetime import timedelta
+from datetime import datetime, timedelta
 from functools import wraps
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import yaml
 from dotenv import dotenv_values
@@ -20,7 +21,7 @@ from tg_butler.admin import AdminStore, web_options
 from tg_butler.config import Settings, load_settings
 from tg_butler.menu import configuration_lock, save_credentials, save_settings
 from tg_butler.store import Store
-from tg_butler.summary import check_connection, list_models
+from tg_butler.summary import check_connection, list_models, send_test_daily
 from tg_butler.web_telegram import TelegramGateway
 
 SECRET_FIELDS = {"TG_API_HASH", "TG_BOT_TOKEN", "SUMMARY_API_KEY"}
@@ -307,6 +308,42 @@ def create_app(config: Path, *, control=system_control) -> Flask:
 
         asyncio.run(send())
         return jsonify(message="测试通知已发送。")
+
+    @app.post("/api/summary-test")
+    @protected
+    def summary_test():
+        import asyncio
+
+        from tg_butler.app import make_notifier
+        from tg_butler.config import NotificationCredentials
+
+        async def send():
+            values = dotenv_values(root / ".env")
+            credentials = NotificationCredentials(
+                bot_token=values.get("TG_BOT_TOKEN", ""),
+                notify_chat_id=values.get("TG_NOTIFY_CHAT_ID", ""),
+            )
+            settings = load_settings(config)
+            store = Store(settings.data_dir / "butler.sqlite3")
+            notifier = make_notifier(settings, credentials)
+            day = datetime.now(ZoneInfo(settings.timezone)).date() - timedelta(days=1)
+            try:
+                count = await send_test_daily(
+                    settings,
+                    store,
+                    notifier,
+                    day,
+                    str(values.get("SUMMARY_API_KEY") or ""),
+                )
+                return day, count
+            finally:
+                store.close()
+                await notifier.close()
+
+        day, count = asyncio.run(send())
+        if not count:
+            raise ValueError("没有启用日报的群组，请先在群组设置中开启“参与每日日报”。")
+        return jsonify(message=f"测试日报已发送：{day.isoformat()}，共 {count} 份。")
 
     return app
 
