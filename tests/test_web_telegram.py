@@ -1,6 +1,8 @@
 import time
+from datetime import datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
+from zoneinfo import ZoneInfo
 
 import pytest
 from telethon.errors import SessionPasswordNeededError
@@ -67,3 +69,43 @@ def test_stopped_task_service_not_started_by_web_lookup(gateway):
     result = manager.execute("dialogs", {}, "owner")
     assert result["items"] == [{"id": -100123, "name": "群组"}]
     control.assert_called_once_with("status")
+
+
+async def test_history_import_stores_previous_complete_day_and_deduplicates(gateway):
+    manager, client, _ = gateway
+    client.is_user_authorized.return_value = True
+    chat = SimpleNamespace(id=-100123)
+    client.get_dialogs.return_value = [
+        SimpleNamespace(id=-100123, name="群组", entity=chat, is_group=True, is_channel=False)
+    ]
+    zone = ZoneInfo("Asia/Shanghai")
+    yesterday = datetime.now(zone).replace(hour=12, minute=0, second=0, microsecond=0) - timedelta(
+        days=1
+    )
+    old = yesterday - timedelta(days=2)
+
+    async def messages(*args, **kwargs):
+        for sent_at, message_id in ((yesterday, 10), (old, 9)):
+            yield SimpleNamespace(
+                id=message_id,
+                date=sent_at,
+                sender_id=7,
+                raw_text="历史消息",
+                media=None,
+                get_sender=AsyncMock(
+                    return_value=SimpleNamespace(first_name="A", last_name="")
+                ),
+            )
+
+    client.iter_messages = messages
+    result = await manager.request("history", {"chat_id": -100123, "days": 1}, "owner")
+    assert result["imported"] == 1
+    assert result["scanned"] == 2
+    from tg_butler.store import Store
+
+    store = Store(manager.config.parent / "data" / "butler.sqlite3")
+    try:
+        start = yesterday.replace(hour=0)
+        assert len(store.messages(-100123, start, start + timedelta(days=1))) == 1
+    finally:
+        store.close()

@@ -282,7 +282,7 @@ def create_app(config: Path, *, control=system_control) -> Flask:
     @app.post("/api/telegram/<action>")
     @protected
     def telegram(action):
-        if action not in {"send-code", "verify-code", "password", "dialogs", "members"}:
+        if action not in {"send-code", "verify-code", "password", "dialogs", "members", "history"}:
             raise ValueError("无效 Telegram 操作")
         return jsonify(gateway.execute(action, request.get_json(), session["revision"]))
 

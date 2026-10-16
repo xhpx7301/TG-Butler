@@ -4,13 +4,18 @@ from __future__ import annotations
 
 import asyncio
 import time
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from dotenv import dotenv_values
 from filelock import FileLock
 from telethon.errors import SessionPasswordNeededError
+from telethon.utils import get_display_name
 
 from tg_butler.app import connect_authorized, make_client
 from tg_butler.config import ApplicationCredentials, load_settings
+from tg_butler.store import Store
+from tg_butler.summary import day_bounds
 
 
 class TelegramGateway:
@@ -89,6 +94,56 @@ class TelegramGateway:
                         }
                     )
                 return {"items": items}
+            if action == "history":
+                chat_id = int(data.get("chat_id", 0))
+                days = int(data.get("days", 1))
+                if days < 1 or days > 30:
+                    raise ValueError("导入天数需要在 1–30 之间")
+                chat = next((item.entity for item in dialogs if item.id == chat_id), None)
+                if chat is None:
+                    raise ValueError("未找到该群组，请先查看群组列表")
+                zone = ZoneInfo(settings.timezone)
+                end_day = datetime.now(zone).date()
+                start_day = end_day - timedelta(days=days)
+                start = day_bounds(start_day, settings.timezone)[0]
+                end = day_bounds(end_day, settings.timezone)[0]
+                store = Store(settings.data_dir / "butler.sqlite3")
+                imported = 0
+                scanned = 0
+                try:
+                    async for message in client.iter_messages(chat, limit=5000):
+                        scanned += 1
+                        sent_at = message.date
+                        if sent_at.tzinfo is None:
+                            sent_at = sent_at.replace(tzinfo=ZoneInfo("UTC"))
+                        if sent_at < start:
+                            break
+                        if sent_at >= end or not message.id:
+                            continue
+                        sender = await message.get_sender()
+                        sender_name = get_display_name(sender) if sender else str(message.sender_id)
+                        text = message.raw_text or (
+                            "[媒体消息]" if message.media else "[非文本消息]"
+                        )
+                        imported += store.add_message(
+                            chat_id,
+                            message.id,
+                            message.sender_id,
+                            sender_name,
+                            text,
+                            sent_at,
+                        )
+                finally:
+                    store.close()
+                return {
+                    "message": (
+                        f"已导入 {start_day.isoformat()} 至 "
+                        f"{(end_day - timedelta(days=1)).isoformat()} 的消息：新增 {imported} 条，"
+                        f"扫描 {scanned} 条。"
+                    ),
+                    "imported": imported,
+                    "scanned": scanned,
+                }
             raise ValueError("不支持的 Telegram 操作")
         finally:
             await client.disconnect()
