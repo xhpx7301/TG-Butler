@@ -20,6 +20,7 @@ from tg_butler.admin import AdminStore, web_options
 from tg_butler.config import Settings, load_settings
 from tg_butler.menu import configuration_lock, save_credentials, save_settings
 from tg_butler.store import Store
+from tg_butler.summary import list_models, test_connection
 from tg_butler.web_telegram import TelegramGateway
 
 SECRET_FIELDS = {"TG_API_HASH", "TG_BOT_TOKEN", "SUMMARY_API_KEY"}
@@ -248,6 +249,34 @@ def create_app(config: Path, *, control=system_control) -> Flask:
         if action not in {"start", "stop", "restart", "logs"}:
             raise ValueError("无效服务操作")
         return jsonify(message=control(action) or "服务操作已提交，请查看状态与启动通知。")
+
+    def ai_request_values(body: dict, *, require_model: bool = True) -> tuple[str, str, str]:
+        api_url = str(body.get("api_url", "")).strip()
+        model = str(body.get("model", "")).strip()
+        if not api_url or not api_url.startswith("https://"):
+            raise ValueError("请填写完整的 HTTPS Chat Completions 接口地址")
+        if require_model and not model:
+            raise ValueError("请先选择或填写模型名称")
+        values = dotenv_values(root / ".env")
+        api_key = str(body.get("api_key", "")).strip() or str(values.get("SUMMARY_API_KEY") or "")
+        return api_url, model, api_key
+
+    @app.post("/api/ai/models")
+    @protected
+    def ai_models():
+        import asyncio
+
+        api_url, _, api_key = ai_request_values(request.get_json() or {}, require_model=False)
+        return jsonify(models=asyncio.run(list_models(api_url, api_key)))
+
+    @app.post("/api/ai/test")
+    @protected
+    def ai_test():
+        import asyncio
+
+        api_url, model, api_key = ai_request_values(request.get_json() or {})
+        answer = asyncio.run(test_connection(api_url, model, api_key))
+        return jsonify(message=f"连接正常，模型已返回：{answer}")
 
     @app.post("/api/telegram/<action>")
     @protected

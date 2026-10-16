@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from collections import Counter
 from datetime import date, datetime, time, timedelta
+from urllib.parse import urlsplit, urlunsplit
 from zoneinfo import ZoneInfo
 
 import httpx
@@ -12,6 +13,64 @@ from tg_butler.notify import Notifier
 from tg_butler.store import Store
 
 log = logging.getLogger(__name__)
+
+
+def _headers(api_key: str) -> dict[str, str]:
+    return {"Authorization": f"Bearer {api_key}"} if api_key else {}
+
+
+def models_url(api_url: str) -> str:
+    """Return the conventional OpenAI-compatible model-list URL."""
+    parts = urlsplit(api_url)
+    path = parts.path.rstrip("/")
+    suffix = "/chat/completions"
+    if path.endswith(suffix):
+        path = path[: -len(suffix)] + "/models"
+    elif path.endswith("/completions"):
+        path = path[: -len("/completions")] + "/models"
+    else:
+        path += "/models"
+    return urlunsplit((parts.scheme, parts.netloc, path, parts.query, ""))
+
+
+def _response_error(response: httpx.Response, action: str) -> ValueError:
+    return ValueError(f"{action}失败：服务商返回 HTTP {response.status_code}")
+
+
+async def list_models(api_url: str, api_key: str) -> list[str]:
+    async with httpx.AsyncClient(timeout=30) as http:
+        response = await http.get(models_url(api_url), headers=_headers(api_key))
+    if response.is_error:
+        raise _response_error(response, "读取模型列表")
+    try:
+        items = response.json()["data"]
+        models = [str(item["id"]) for item in items if isinstance(item, dict) and item.get("id")]
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError("读取模型列表失败：返回格式不是 OpenAI 兼容格式") from exc
+    return sorted(set(models), key=str.casefold)
+
+
+async def test_connection(api_url: str, model: str, api_key: str) -> str:
+    async with httpx.AsyncClient(timeout=45) as http:
+        response = await http.post(
+            api_url,
+            headers=_headers(api_key),
+            json={
+                "model": model,
+                "messages": [{"role": "user", "content": "请仅回复 OK"}],
+                "max_tokens": 16,
+                "temperature": 0,
+            },
+        )
+    if response.is_error:
+        raise _response_error(response, "连接测试")
+    try:
+        answer = response.json()["choices"][0]["message"]["content"]
+    except (KeyError, IndexError, TypeError, ValueError) as exc:
+        raise ValueError("连接测试失败：返回格式不是 OpenAI Chat Completions 格式") from exc
+    if not isinstance(answer, str) or not answer.strip():
+        raise ValueError("连接测试失败：模型返回了空内容")
+    return answer.strip()[:200]
 
 
 def day_bounds(day: date, timezone: str) -> tuple[datetime, datetime]:
@@ -73,7 +132,7 @@ async def build_digest(
         selected.append(line)
         length += len(line)
     try:
-        headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+        headers = _headers(api_key)
         async with httpx.AsyncClient(timeout=90) as http:
             response = await http.post(
                 config.api_url,

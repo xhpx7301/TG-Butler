@@ -1,5 +1,5 @@
 import json
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
@@ -152,6 +152,53 @@ def test_web_credentials_preserve_secrets_when_blank(web):
         == 200
     )
     assert dotenv_values(config.parent / ".env")["SUMMARY_API_KEY"] == ""
+
+
+def test_ai_models_and_connection_use_current_form_values(web, monkeypatch):
+    app, _, _ = web
+    client = app.test_client()
+    headers = authenticate(client)
+    models = AsyncMock(return_value=["gpt-5.5", "deepseek-chat"])
+    connection = AsyncMock(return_value="OK")
+    monkeypatch.setattr("tg_butler.web.list_models", models)
+    monkeypatch.setattr("tg_butler.web.test_connection", connection)
+    payload = {
+        "api_url": "https://skybridge-api.com/v1/chat/completions",
+        "model": "gpt-5.5",
+        "api_key": "temporary-key",
+    }
+    response = client.post("/api/ai/models", json=payload, headers=headers)
+    assert response.status_code == 200
+    assert response.json == {"models": ["gpt-5.5", "deepseek-chat"]}
+    models.assert_awaited_once_with(payload["api_url"], payload["api_key"])
+    response = client.post("/api/ai/test", json=payload, headers=headers)
+    assert response.status_code == 200
+    assert "OK" in response.json["message"]
+    connection.assert_awaited_once_with(
+        payload["api_url"], payload["model"], payload["api_key"]
+    )
+
+
+def test_ai_models_can_use_saved_key_and_reject_missing_model(web, monkeypatch):
+    app, _, _ = web
+    client = app.test_client()
+    headers = authenticate(client)
+    models = AsyncMock(return_value=[])
+    monkeypatch.setattr("tg_butler.web.list_models", models)
+    response = client.post(
+        "/api/ai/models",
+        json={"api_url": "https://example.test/v1/chat/completions"},
+        headers=headers,
+    )
+    assert response.status_code == 200
+    models.assert_awaited_once_with("https://example.test/v1/chat/completions", "private-key")
+    response = client.post(
+        "/api/ai/test",
+        json={"api_url": "https://example.test/v1/chat/completions"},
+        headers=headers,
+    )
+    assert response.status_code == 400
+    assert "模型名称" in response.json["error"]
 
 
 def test_password_validation_and_hash_storage(tmp_path):
