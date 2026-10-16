@@ -14,6 +14,7 @@ from tg_butler.store import Store
 from tg_butler.summary import (
     build_digest,
     check_connection,
+    clean_ai_text,
     completion_urls,
     day_bounds,
     send_daily,
@@ -232,6 +233,11 @@ async def test_connection_accepts_responses_format(monkeypatch):
     answer = await check_connection("https://skybridge-api.com", "gpt-5.5", "secret")
     assert answer == "OK"
     assert post.await_args.args[0] == "https://skybridge-api.com/v1/responses"
+    assert post.await_args.kwargs["json"]["max_output_tokens"] == 16
+
+
+def test_clean_ai_text_removes_markdown_that_plain_telegram_messages_show():
+    assert clean_ai_text("**主要话题**\n# 结论\n```text\n内容\n```") == "主要话题\n结论\n内容"
 
 
 def test_unicode_notification_chunks_fit_telegram_limit():
