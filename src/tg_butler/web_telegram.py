@@ -110,6 +110,7 @@ class TelegramGateway:
                 store = Store(settings.data_dir / "butler.sqlite3")
                 imported = 0
                 scanned = 0
+                sender_names: dict[int | None, str] = {}
                 try:
                     async for message in client.iter_messages(chat, limit=5000):
                         scanned += 1
@@ -120,15 +121,19 @@ class TelegramGateway:
                             break
                         if sent_at >= end or not message.id:
                             continue
-                        sender = await message.get_sender()
-                        sender_name = get_display_name(sender) if sender else str(message.sender_id)
+                        sender_id = message.sender_id
+                        sender_name = sender_names.get(sender_id)
+                        if sender_name is None:
+                            sender = getattr(message, "sender", None) or await message.get_sender()
+                            sender_name = get_display_name(sender) if sender else str(sender_id)
+                            sender_names[sender_id] = sender_name
                         text = message.raw_text or (
                             "[媒体消息]" if message.media else "[非文本消息]"
                         )
                         imported += store.add_message(
                             chat_id,
                             message.id,
-                            message.sender_id,
+                            sender_id,
                             sender_name,
                             text,
                             sent_at,
@@ -154,8 +159,11 @@ class TelegramGateway:
             active = self.control("status").strip() == "active"
             if active:
                 self.control("stop")
+            timeout = 180 if action == "history" else 60
             try:
-                return asyncio.run(asyncio.wait_for(self.request(action, data, owner), timeout=60))
+                return asyncio.run(
+                    asyncio.wait_for(self.request(action, data, owner), timeout=timeout)
+                )
             finally:
                 if active:
                     self.control("start")
