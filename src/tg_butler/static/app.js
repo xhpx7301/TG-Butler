@@ -26,7 +26,7 @@ async function load(){
   fill("notification-form",{TG_NOTIFY_CHAT_ID:state.credentials.TG_NOTIFY_CHAT_ID||"",TG_BOT_TOKEN:""});
   for(const [form,key] of [["application-form","TG_API_HASH"],["notification-form","TG_BOT_TOKEN"],["ai-form","SUMMARY_API_KEY"]])$(form).elements.namedItem(key).placeholder=state.configured[key]?"已保存 · 留空保留":"尚未设置";
   fill("summary-form",{enabled:true,at:"00:05",max_messages:500,max_chars:30000,...summary});
-  $("summary-model-options").replaceChildren();
+  setModelOptions([], summary.model||"");
   fill("system-form",{timezone:config.timezone||"Asia/Shanghai",retention_days:config.retention_days||30,queue_size:(config.notifications||{}).queue_size||500});
   $("group-list").replaceChildren();(config.groups||[]).forEach(addGroup);
   $("checkin-list").replaceChildren();(config.checkins||[]).forEach(addCheckin);
@@ -49,8 +49,15 @@ function addCheckin(job={}){const grid=record("checkin-list",job.name||"签到�
   ["require_reply","仅匹配回复本次命令",job.require_reply!==false,"推荐打开，避免把其他人的成功回复算给你。","checkbox"]])inputField(grid,key,label,value,help,type||"text");}
 function records(id){return [...$(id).querySelectorAll(".record")].map(box=>{const values={...box._original};box.querySelectorAll("[data-key]").forEach(input=>values[input.dataset.key]=input.type==="checkbox"?input.checked:input.value.trim());return values;});}
 function integer(value,label){if(!/^-?\d+$/.test(String(value)))throw Error(label+"需要填写数字");const result=Number(value);if(!Number.isSafeInteger(result))throw Error(label+"超出支持范围");return result;}
-function aiFormValues(){return {api_url:$("summary-form").elements.api_url.value.trim(),model:$("summary-form").elements.model.value.trim(),api_key:$("ai-form").elements.SUMMARY_API_KEY.value.trim()};}
-function showModels(models){const list=$("summary-model-options");list.replaceChildren();for(const model of models){const option=document.createElement("option");option.value=model;list.append(option);}if(!models.length)toast("接口返回的模型列表为空",true);else toast(`已读取 ${models.length} 个模型，请在模型名称中选择`);}
+function setModelOptions(models, selected=""){
+  const select=$("summary-model-select");select.replaceChildren();
+  const placeholder=document.createElement("option");placeholder.value="";placeholder.textContent=models.length?"请选择模型":"请先读取模型";select.append(placeholder);
+  for(const model of models){const option=document.createElement("option");option.value=model;option.textContent=model;select.append(option);}
+  if(selected && !models.includes(selected)){const option=document.createElement("option");option.value=selected;option.textContent=selected+"（当前配置）";select.append(option);}
+  select.value=selected||"";
+}
+function aiFormValues(){return {api_url:$("summary-form").elements.api_url.value.trim(),model:$("summary-model-manual").value.trim()||$("summary-model-select").value,api_key:$("ai-form").elements.SUMMARY_API_KEY.value.trim()};}
+function showModels(models){const current=$("summary-model-manual").value.trim();setModelOptions(models,current);if(!models.length)toast("接口返回的模型列表为空",true);else toast(`已读取 ${models.length} 个模型，请在下拉框中选择`);}
 async function saveConfig(change){const config=structuredClone(state.config);change(config);const result=await api("config",{config,revision:state.revision});await load();toast(result.message);}
 for(const button of document.querySelectorAll("[data-page]"))button.onclick=()=>navigate(button.dataset.page);
 bindForm("login-form",async(data,form)=>{const result=await api("login",data);csrf=result.csrf;$("logged-user").textContent=result.username;fill("admin-form",{username:result.username});form.reset();await load();});
@@ -63,6 +70,7 @@ bindButton("dialogs",async()=>showItems((await api("telegram/dialogs",{})).items
 bindButton("notify-test",async()=>toast((await api("notify-test",{})).message));
 bindButton("fetch-models",async()=>showModels((await api("ai/models",aiFormValues())).models));
 bindButton("test-ai",async()=>toast((await api("ai/test",aiFormValues())).message));
+$("summary-model-select").addEventListener("change",event=>$("summary-model-manual").value=event.target.value);
 bindButton("add-group",()=>addGroup());bindButton("add-checkin",()=>addCheckin());
 bindButton("save-groups",()=>saveConfig(config=>config.groups=records("group-list").map(row=>({...row,id:integer(row.id,"群组 ID"),watch_users:row.watch_users.replaceAll("，",",").split(",").filter(x=>x.trim()).map(x=>integer(x.trim(),"关注用户 ID"))}))));
 bindButton("save-checkins",()=>saveConfig(config=>config.checkins=records("checkin-list").map(row=>({...row,chat_id:integer(row.chat_id,"群组 ID"),responder_id:row.responder_id?integer(row.responder_id,"机器人 ID"):null,success_pattern:row.success_pattern||null,failure_pattern:row.failure_pattern||null,timeout_seconds:integer(row.timeout_seconds,"超时秒数")}))));
