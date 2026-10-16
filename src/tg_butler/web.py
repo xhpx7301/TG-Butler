@@ -20,7 +20,7 @@ from tg_butler.admin import AdminStore, web_options
 from tg_butler.config import Settings, load_settings
 from tg_butler.menu import configuration_lock, save_credentials, save_settings
 from tg_butler.store import Store
-from tg_butler.summary import list_models, test_connection
+from tg_butler.summary import check_connection, list_models
 from tg_butler.web_telegram import TelegramGateway
 
 SECRET_FIELDS = {"TG_API_HASH", "TG_BOT_TOKEN", "SUMMARY_API_KEY"}
@@ -254,7 +254,7 @@ def create_app(config: Path, *, control=system_control) -> Flask:
         api_url = str(body.get("api_url", "")).strip()
         model = str(body.get("model", "")).strip()
         if not api_url or not api_url.startswith("https://"):
-            raise ValueError("请填写完整的 HTTPS Chat Completions 接口地址")
+            raise ValueError("请填写 HTTPS 的 OpenAI Responses 或 Chat Completions 接口地址")
         if require_model and not model:
             raise ValueError("请先选择或填写模型名称")
         values = dotenv_values(root / ".env")
@@ -275,7 +275,7 @@ def create_app(config: Path, *, control=system_control) -> Flask:
         import asyncio
 
         api_url, model, api_key = ai_request_values(request.get_json() or {})
-        answer = asyncio.run(test_connection(api_url, model, api_key))
+        answer = asyncio.run(check_connection(api_url, model, api_key))
         return jsonify(message=f"连接正常，模型已返回：{answer}")
 
     @app.post("/api/telegram/<action>")

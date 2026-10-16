@@ -11,7 +11,13 @@ from tg_butler.checkin import match_response, run_checkin
 from tg_butler.config import Checkin, Group, Settings, load_settings
 from tg_butler.notify import Notifier, chunks
 from tg_butler.store import Store
-from tg_butler.summary import build_digest, day_bounds, send_daily
+from tg_butler.summary import (
+    build_digest,
+    check_connection,
+    completion_urls,
+    day_bounds,
+    send_daily,
+)
 
 
 @pytest.fixture
@@ -198,6 +204,25 @@ async def test_ai_failure_returns_honest_local_fallback(monkeypatch):
     )
     assert "AI 摘要生成失败" in digest
     assert "hello" in digest
+
+
+def test_completion_urls_support_root_and_explicit_endpoints():
+    assert completion_urls("https://skybridge-api.com") == [
+        ("https://skybridge-api.com/v1/responses", "responses"),
+        ("https://skybridge-api.com/v1/chat/completions", "chat"),
+    ]
+    assert completion_urls("https://example.test/v1/chat/completions") == [
+        ("https://example.test/v1/chat/completions", "chat")
+    ]
+
+
+async def test_connection_accepts_responses_format(monkeypatch):
+    response = httpx.Response(200, json={"output_text": "OK"})
+    post = AsyncMock(return_value=response)
+    monkeypatch.setattr(httpx.AsyncClient, "post", post)
+    answer = await check_connection("https://skybridge-api.com", "gpt-5.5", "secret")
+    assert answer == "OK"
+    assert post.await_args.args[0] == "https://skybridge-api.com/v1/responses"
 
 
 def test_unicode_notification_chunks_fit_telegram_limit():

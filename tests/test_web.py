@@ -161,7 +161,7 @@ def test_ai_models_and_connection_use_current_form_values(web, monkeypatch):
     models = AsyncMock(return_value=["gpt-5.5", "deepseek-chat"])
     connection = AsyncMock(return_value="OK")
     monkeypatch.setattr("tg_butler.web.list_models", models)
-    monkeypatch.setattr("tg_butler.web.test_connection", connection)
+    monkeypatch.setattr("tg_butler.web.check_connection", connection)
     payload = {
         "api_url": "https://skybridge-api.com/v1/chat/completions",
         "model": "gpt-5.5",
