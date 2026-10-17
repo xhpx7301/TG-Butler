@@ -27,6 +27,17 @@ class Group(StrictModel):
     daily_summary: bool = True
     notify_all: bool = False
     watch_users: list[int] = Field(default_factory=list)
+    report_keywords: list[str] = Field(default_factory=list)
+    report_match_mode: str = "any"
+    report_images: bool = False
+    report_links: bool = False
+
+    @model_validator(mode="after")
+    def validate_report_filters(self) -> Group:
+        if self.report_match_mode not in {"any", "all"}:
+            raise ValueError("report_match_mode must be any or all")
+        self.report_keywords = [item.strip() for item in self.report_keywords if item.strip()]
+        return self
 
 
 class Checkin(StrictModel):
@@ -117,8 +128,54 @@ class NotificationCredentials(BaseModel):
         return self
 
 
-class Credentials(ApplicationCredentials, NotificationCredentials):
+class Credentials(ApplicationCredentials):
+    # Legacy names remain supported and are used for both roles when the new
+    # role-specific values are absent.
+    bot_token: SecretStr = SecretStr("")
+    notify_chat_id: int | None = None
+    monitor_bot_token: SecretStr = SecretStr("")
+    monitor_notify_chat_id: int | None = None
+    report_bot_token: SecretStr = SecretStr("")
+    report_notify_chat_id: int | None = None
     summary_api_key: SecretStr = SecretStr("")
+
+    @model_validator(mode="after")
+    def validate_notifications(self) -> Credentials:
+        for token, chat_id, role in (
+            (self.monitor_bot_token, self.monitor_notify_chat_id, "monitor"),
+            (self.report_bot_token, self.report_notify_chat_id, "report"),
+        ):
+            if token.get_secret_value() == "replace_with_bot_token":
+                raise ValueError("请填写 BotFather 提供的真实 Bot Token")
+            if bool(token.get_secret_value()) != (chat_id is not None):
+                raise ValueError(
+                    f"{role} notification token and chat ID must be configured together"
+                )
+        if (
+            self.bot_token.get_secret_value()
+            and self.bot_token.get_secret_value() == "replace_with_bot_token"
+        ):
+            raise ValueError("请填写 BotFather 提供的真实 Bot Token")
+        if self.bot_token.get_secret_value() and self.notify_chat_id is None:
+            raise ValueError("通知机器人 Token 和接收用户 ID 必须同时配置")
+        if not self.bot_token.get_secret_value() and self.notify_chat_id is not None:
+            raise ValueError("通知机器人 Token 和接收用户 ID 必须同时配置")
+        if not self.bot_token.get_secret_value() and not self.monitor_bot_token.get_secret_value():
+            raise ValueError("至少配置一组通知机器人凭据")
+        if not self.report_bot_token.get_secret_value() and not self.bot_token.get_secret_value():
+            raise ValueError("至少配置日报机器人凭据")
+        return self
+
+    def notification(self, role: str) -> NotificationCredentials:
+        if role not in {"monitor", "report"}:
+            raise ValueError("通知机器人角色必须是 monitor 或 report")
+        token = getattr(self, f"{role}_bot_token").get_secret_value()
+        chat_id = getattr(self, f"{role}_notify_chat_id")
+        if token and chat_id is not None:
+            return NotificationCredentials(bot_token=token, notify_chat_id=chat_id)
+        return NotificationCredentials(
+            bot_token=self.bot_token.get_secret_value(), notify_chat_id=self.notify_chat_id
+        )
 
 
 def load_settings(path: Path) -> Settings:
@@ -136,7 +193,11 @@ def load_credentials(config_path: Path) -> Credentials:
         api_id=os.environ.get("TG_API_ID", ""),
         api_hash=os.environ.get("TG_API_HASH", ""),
         bot_token=os.environ.get("TG_BOT_TOKEN", ""),
-        notify_chat_id=os.environ.get("TG_NOTIFY_CHAT_ID", ""),
+        notify_chat_id=os.environ.get("TG_NOTIFY_CHAT_ID") or None,
+        monitor_bot_token=os.environ.get("TG_MONITOR_BOT_TOKEN", ""),
+        monitor_notify_chat_id=os.environ.get("TG_MONITOR_NOTIFY_CHAT_ID") or None,
+        report_bot_token=os.environ.get("TG_REPORT_BOT_TOKEN", ""),
+        report_notify_chat_id=os.environ.get("TG_REPORT_NOTIFY_CHAT_ID") or None,
         summary_api_key=os.environ.get("SUMMARY_API_KEY", ""),
     )
 
@@ -148,9 +209,15 @@ def load_application_credentials(config_path: Path) -> ApplicationCredentials:
     )
 
 
-def load_notification_credentials(config_path: Path) -> NotificationCredentials:
+def load_notification_credentials(
+    config_path: Path, role: str = "report"
+) -> NotificationCredentials:
     load_dotenv(config_path.resolve().parent / ".env", override=False)
-    return NotificationCredentials(
-        bot_token=os.environ.get("TG_BOT_TOKEN", ""),
-        notify_chat_id=os.environ.get("TG_NOTIFY_CHAT_ID", ""),
+    if role not in {"monitor", "report"}:
+        raise ValueError("通知机器人角色必须是 monitor 或 report")
+    prefix = role.upper()
+    token = os.environ.get(f"TG_{prefix}_BOT_TOKEN") or os.environ.get("TG_BOT_TOKEN", "")
+    chat_id = os.environ.get(f"TG_{prefix}_NOTIFY_CHAT_ID") or os.environ.get(
+        "TG_NOTIFY_CHAT_ID", ""
     )
+    return NotificationCredentials(bot_token=token, notify_chat_id=chat_id)

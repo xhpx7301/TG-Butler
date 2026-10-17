@@ -66,12 +66,13 @@ async def execute(args) -> None:
         finally:
             await client.disconnect()
         return
-    credentials = (
-        load_notification_credentials(args.config)
-        if args.command == "notify-test"
-        else load_credentials(args.config)
-    )
-    notifier = make_notifier(settings, credentials)
+    if args.command == "notify-test":
+        credentials = None
+        notifier_credentials = load_notification_credentials(args.config, "monitor")
+    else:
+        credentials = load_credentials(args.config)
+        notifier_credentials = credentials.notification("report")
+    notifier = make_notifier(settings, notifier_credentials)
     try:
         if args.command == "notify-test":
             await notifier.send("✅ TG-Butler 通知测试成功。")

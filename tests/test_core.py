@@ -7,8 +7,9 @@ import httpx
 import pytest
 from pydantic import ValidationError
 
+from tg_butler.app import report_alert_matches
 from tg_butler.checkin import match_response, run_checkin
-from tg_butler.config import Checkin, Group, Settings, load_settings
+from tg_butler.config import Checkin, Credentials, Group, Settings, load_settings
 from tg_butler.notify import Notifier, chunks
 from tg_butler.store import Store
 from tg_butler.summary import (
@@ -67,6 +68,39 @@ def test_config_rejects_unknown_keys_and_ambiguous_rules():
         Settings.model_validate({"groups": [{"id": 1, "watch_user": [2]}]})
     with pytest.raises(ValidationError):
         Checkin(name="job", chat_id=1, at="09:00", command="/go", success_pattern="ok")
+
+
+def test_report_filters_match_keywords_links_and_images():
+    image = SimpleNamespace(media=SimpleNamespace(document=SimpleNamespace(mime_type="image/jpeg")))
+    group = Group(
+        id=1,
+        watch_users=[2],
+        report_keywords=["重要", "项目"],
+        report_match_mode="all",
+        report_images=True,
+        report_links=True,
+    )
+    assert report_alert_matches(group, "这是重要项目 https://example.test", SimpleNamespace())
+    assert report_alert_matches(group, "普通文字", image)
+    assert not report_alert_matches(group, "只有重要", SimpleNamespace())
+
+
+def test_notification_credentials_support_split_roles_and_legacy_fallback():
+    credentials = Credentials(
+        api_id=1,
+        api_hash="hash",
+        monitor_bot_token="monitor-token",
+        monitor_notify_chat_id=10,
+        report_bot_token="report-token",
+        report_notify_chat_id=11,
+    )
+    assert credentials.notification("monitor").notify_chat_id == 10
+    assert credentials.notification("report").bot_token.get_secret_value() == "report-token"
+    legacy = Credentials(
+        api_id=1, api_hash="hash", bot_token="legacy-token", notify_chat_id=12
+    )
+    assert legacy.notification("monitor").notify_chat_id == 12
+    assert legacy.notification("report").bot_token.get_secret_value() == "legacy-token"
     with pytest.raises(ValidationError):
         Checkin(
             name="job", chat_id=1, at="09:00", command="/go", responder_id=3, success_pattern="["

@@ -21,6 +21,11 @@ groups:
     daily_summary: true
     notify_all: false
     watch_users: [123456789] # Numeric Telegram user IDs; empty means no user alerts.
+    # 日报机器人只发送命中以下任一条件的关注用户消息；多个关键词默认命中任意一个即可。
+    report_keywords: [重要, 项目]
+    report_match_mode: any # any 或 all
+    report_images: false
+    report_links: false
 
 checkins: []
 # To enable check-ins, replace the empty list above with:

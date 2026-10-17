@@ -18,16 +18,31 @@ from pydantic import ValidationError
 from waitress import serve
 
 from tg_butler.admin import AdminStore, web_options
-from tg_butler.config import Settings, load_settings
+from tg_butler.config import NotificationCredentials, Settings, load_settings
 from tg_butler.menu import configuration_lock, save_credentials, save_settings
 from tg_butler.store import Store
 from tg_butler.summary import check_connection, list_models, send_test_daily
 from tg_butler.web_telegram import TelegramGateway
 
-SECRET_FIELDS = {"TG_API_HASH", "TG_BOT_TOKEN", "SUMMARY_API_KEY"}
+SECRET_FIELDS = {
+    "TG_API_HASH",
+    "TG_BOT_TOKEN",
+    "TG_MONITOR_BOT_TOKEN",
+    "TG_REPORT_BOT_TOKEN",
+    "SUMMARY_API_KEY",
+}
 SECTIONS = {
     "application": {"TG_API_ID", "TG_API_HASH"},
-    "notification": {"TG_BOT_TOKEN", "TG_NOTIFY_CHAT_ID"},
+    "notification": {
+        "TG_BOT_TOKEN",
+        "TG_NOTIFY_CHAT_ID",
+        "TG_MONITOR_BOT_TOKEN",
+        "TG_MONITOR_NOTIFY_CHAT_ID",
+        "TG_REPORT_BOT_TOKEN",
+        "TG_REPORT_NOTIFY_CHAT_ID",
+    },
+    "monitor": {"TG_MONITOR_BOT_TOKEN", "TG_MONITOR_NOTIFY_CHAT_ID"},
+    "report": {"TG_REPORT_BOT_TOKEN", "TG_REPORT_NOTIFY_CHAT_ID"},
     "ai": {"SUMMARY_API_KEY"},
 }
 
@@ -187,12 +202,23 @@ def create_app(config: Path, *, control=system_control) -> Flask:
             version = revision()
             values = dotenv_values(root / ".env")
         visible = {
-            key: value for key, value in values.items() if key in {"TG_API_ID", "TG_NOTIFY_CHAT_ID"}
+            key: value
+            for key, value in values.items()
+            if key
+            in {
+                "TG_API_ID",
+                "TG_NOTIFY_CHAT_ID",
+                "TG_MONITOR_NOTIFY_CHAT_ID",
+                "TG_REPORT_NOTIFY_CHAT_ID",
+            }
         }
         configured = {
             key: bool(values.get(key)) and not str(values[key]).startswith("replace_with_")
             for key in SECRET_FIELDS
         }
+        for role in ("MONITOR", "REPORT"):
+            if not configured[f"TG_{role}_BOT_TOKEN"]:
+                configured[f"TG_{role}_BOT_TOKEN"] = configured["TG_BOT_TOKEN"]
         settings = load_settings(config)
         store = Store(settings.data_dir / "butler.sqlite3")
         try:
@@ -292,13 +318,20 @@ def create_app(config: Path, *, control=system_control) -> Flask:
         import asyncio
 
         from tg_butler.app import make_notifier
-        from tg_butler.config import NotificationCredentials
-
         async def send():
             values = dotenv_values(root / ".env")
+            role = str((request.get_json() or {}).get("role", "monitor"))
+            if role not in {"monitor", "report"}:
+                raise ValueError("无效通知机器人角色")
+            token_key = "TG_MONITOR_BOT_TOKEN" if role == "monitor" else "TG_REPORT_BOT_TOKEN"
+            chat_key = (
+                "TG_MONITOR_NOTIFY_CHAT_ID"
+                if role == "monitor"
+                else "TG_REPORT_NOTIFY_CHAT_ID"
+            )
             credentials = NotificationCredentials(
-                bot_token=values.get("TG_BOT_TOKEN", ""),
-                notify_chat_id=values.get("TG_NOTIFY_CHAT_ID", ""),
+                bot_token=values.get(token_key) or values.get("TG_BOT_TOKEN", ""),
+                notify_chat_id=values.get(chat_key) or values.get("TG_NOTIFY_CHAT_ID", ""),
             )
             notifier = make_notifier(load_settings(config), credentials)
             try:
@@ -315,13 +348,12 @@ def create_app(config: Path, *, control=system_control) -> Flask:
         import asyncio
 
         from tg_butler.app import make_notifier
-        from tg_butler.config import NotificationCredentials
-
         async def send():
             values = dotenv_values(root / ".env")
             credentials = NotificationCredentials(
-                bot_token=values.get("TG_BOT_TOKEN", ""),
-                notify_chat_id=values.get("TG_NOTIFY_CHAT_ID", ""),
+                bot_token=values.get("TG_REPORT_BOT_TOKEN") or values.get("TG_BOT_TOKEN", ""),
+                notify_chat_id=values.get("TG_REPORT_NOTIFY_CHAT_ID")
+                or values.get("TG_NOTIFY_CHAT_ID", ""),
             )
             settings = load_settings(config)
             store = Store(settings.data_dir / "butler.sqlite3")

@@ -82,7 +82,7 @@ def save_credentials(
     if not locked:
         with configuration_lock(path):
             return save_credentials(path, values, section, locked=True)
-    if section not in {"all", "application", "notification", "ai"}:
+    if section not in {"all", "application", "notification", "monitor", "report", "ai"}:
         raise ValueError("Unknown credential section")
     if section == "application":
         ApplicationCredentials(
@@ -92,6 +92,16 @@ def save_credentials(
         NotificationCredentials(
             bot_token=values.get("TG_BOT_TOKEN", ""),
             notify_chat_id=values.get("TG_NOTIFY_CHAT_ID", ""),
+        )
+    elif section in {"monitor", "report"}:
+        NotificationCredentials(
+            bot_token=values.get(
+                "TG_MONITOR_BOT_TOKEN" if section == "monitor" else "TG_REPORT_BOT_TOKEN", ""
+            ),
+            notify_chat_id=values.get(
+                "TG_MONITOR_NOTIFY_CHAT_ID" if section == "monitor" else "TG_REPORT_NOTIFY_CHAT_ID",
+                "",
+            ),
         )
     elif section == "all":
         Credentials(

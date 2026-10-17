@@ -20,7 +20,7 @@ curl -fsSL https://raw.githubusercontent.com/xhpx7301/TG-Butler/main/deploy/inst
 
 脚本会安装依赖、创建专用账号、下载代码、建立 Python 虚拟环境并注册任务服务，自动启动网页后台并设置开机自启，然后进入 **bu 中文管理菜单**。首次默认管理员用户名为 **pingzi**，密码为 **pingzi**；已有管理员账户会保留。按下文建立 SSH 隧道即可登录网页完成配置，也可在网页或 **bu → 1 网页后台 → 2 管理员账户** 修改管理员账户。Telegram 首次登录仍需你输入验证码和可能的两步验证密码。
 
-运行前请准备下文列出的 Telegram 应用凭据、通知机器人 Token 和你自己的用户 ID，并向通知机器人发送 `/start`。群组 ID 会在登录后列出；关注用户 ID、签到命令和签到机器人的数字 ID 需按实际群组填写。
+运行前请准备下文列出的 Telegram 应用凭据、监控/日报机器人 Token 和你自己的用户 ID，并分别向两个机器人发送 `/start`。群组 ID 会在登录后列出；关注用户 ID、签到命令和签到机器人的数字 ID 需按实际群组填写。
 
 重复运行会更新 `main` 代码、保留 `.env`、`config.yaml` 和 `data/`，并在重新配置前停止服务。安装中断时检查终端错误后重新执行即可。默认安装到 `/opt/tg-butler`，首次使用保持 `data_dir: data`；自定义路径需按下文调整 systemd 服务。
 
@@ -103,7 +103,7 @@ bu
 
 API ID / API HASH 是 Telegram **应用凭据**，首次需要手动填写。用你的 Telegram 账号登录 [my.telegram.org](https://my.telegram.org)，进入 **API development tools**，创建应用后复制 `api_id` 和 `api_hash`。它们用于登录用户账号、读取群消息与发送签到，不是用户 ID、短信验证码或 Bot Token。账号登录还需要手机号、验证码及可能的两步验证密码。
 
-通知机器人在 **bu → 2 Telegram 配置 → 3** 单独配置，其 Token 来自 [@BotFather](https://t.me/BotFather)，只负责发送提醒。AI 服务密钥在 **bu → 3 监控任务 → 3** 单独填写。各部分可独立保存；登录与列出群组只需要应用凭据，测试通知只需要机器人凭据，启动完整服务前才要求两部分都配置好。密钥显示“已设置”仅代表本地已填写，不代表已经通过 Telegram 验证；旧版示例占位值会被视为未设置并拒绝使用。
+通知机器人在网页“通知机器人”页分别配置，Token 来自 [@BotFather](https://t.me/BotFather)。监控机器人负责关注用户的每条消息，日报机器人负责日报、签到结果和筛选提醒。菜单仍支持旧版单机器人变量；需要分开配置时直接在 `.env` 或网页填写四个新变量。AI 服务密钥在 **bu → 3 监控任务 → 3** 单独填写。各部分可独立保存；登录与列出群组只需要应用凭据，测试通知只需要机器人凭据，启动完整服务前才要求两部分都配置好。密钥显示“已设置”仅代表本地已填写，不代表已经通过 Telegram 验证；旧版示例占位值会被视为未设置并拒绝使用。
 
 保存参数前会校验，校验失败不覆盖文件；保存成功会重启正在运行的服务，使参数生效。服务原本停止时保持停止。登录、查看群组/成员以及手动日报会临时暂停服务，完成后恢复原运行状态，以免共用账号会话。暂停期间的新消息不会自动补抓。菜单通过系统锁限制同时打开多个 `bu`。
 
@@ -181,10 +181,18 @@ sudo -u tgbutler nano /opt/tg-butler/config.yaml
 ```dotenv
 TG_API_ID=你的应用数字ID
 TG_API_HASH=你的应用HASH
-TG_BOT_TOKEN=你创建的机器人TOKEN
+# 旧版单机器人配置仍可用，会同时作为下面两个机器人的回退值
+TG_BOT_TOKEN=旧版机器人TOKEN
 TG_NOTIFY_CHAT_ID=你的数字用户ID
+# 推荐：拆分监控机器人和日报机器人
+TG_MONITOR_BOT_TOKEN=监控机器人TOKEN
+TG_MONITOR_NOTIFY_CHAT_ID=接收监控消息的数字用户ID
+TG_REPORT_BOT_TOKEN=日报机器人TOKEN
+TG_REPORT_NOTIFY_CHAT_ID=接收日报的数字用户ID
 SUMMARY_API_KEY=
 ```
+
+监控机器人会发送关注用户的每条新消息；日报机器人发送每日日报、签到结果，以及群组设置中命中条件的关注用户消息。两个机器人都要先发送 `/start`，接收 ID 通常填写自己的数字用户 ID。若只保留旧版变量，两个角色会使用同一个机器人并兼容原有行为。
 
 先完成账号登录，查找实际群组 ID 和成员 ID，再替换示例配置中的假 ID：
 
@@ -215,6 +223,10 @@ groups:
     daily_summary: true
     notify_all: false
     watch_users: [123456789, 234567890]
+    report_keywords: [重要, 项目] # 日报机器人筛选关注用户消息
+    report_match_mode: any # any=任一关键词；all=全部关键词
+    report_images: false # 关注用户发图片时通知日报机器人
+    report_links: false # 关注用户发链接时通知日报机器人
 
 checkins:
   - name: 某群每日签到
@@ -228,7 +240,7 @@ checkins:
     require_reply: true
 ```
 
-时间使用 `HH:MM` 格式并加引号，全部以 `timezone` 为准。建议使用 `Asia/Shanghai` 等无夏令时的时区。`watch_users: []` 表示不指定关注用户；`notify_all: true` 表示群内所有收到的新消息都提醒。群内消息不论是否来自关注用户，都会入库以便日报使用。
+时间使用 `HH:MM` 格式并加引号，全部以 `timezone` 为准。建议使用 `Asia/Shanghai` 等无夏令时的时区。`watch_users: []` 表示不指定关注用户；`notify_all: true` 表示监控机器人提醒群内所有收到的新消息。`report_keywords`、`report_images`、`report_links` 是日报机器人的筛选条件，多个条件之间是“或”；全部关闭时日报机器人不会额外发送关注用户消息。群内消息不论是否来自关注用户，都会入库以便日报使用。
 
 签到群可以只配置在 `checkins` 中，无须同时放入 `groups`。每个签到任务名称必须唯一，每个群 ID 在 `groups` 中也只能出现一次。
 

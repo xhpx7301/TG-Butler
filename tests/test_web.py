@@ -2,6 +2,7 @@ import json
 from unittest.mock import AsyncMock, Mock
 
 import pytest
+from dotenv import dotenv_values
 
 from tg_butler.admin import AdminStore
 from tg_butler.menu import save_settings
@@ -144,14 +145,47 @@ def test_web_credentials_preserve_secrets_when_blank(web):
         headers=headers,
     )
     assert response.status_code == 200
-    from dotenv import dotenv_values
-
     assert dotenv_values(config.parent / ".env")["TG_BOT_TOKEN"] == "private-token"
     assert (
         client.post("/api/credentials/ai", json={"clear_key": True}, headers=headers).status_code
         == 200
     )
     assert dotenv_values(config.parent / ".env")["SUMMARY_API_KEY"] == ""
+
+
+def test_split_notification_credentials_are_saved_and_role_tests_use_them(web, monkeypatch):
+    app, config, _ = web
+    client = app.test_client()
+    headers = authenticate(client)
+    response = client.post(
+        "/api/credentials/monitor",
+        json={"TG_MONITOR_BOT_TOKEN": "monitor-token", "TG_MONITOR_NOTIFY_CHAT_ID": "101"},
+        headers=headers,
+    )
+    assert response.status_code == 200
+    response = client.post(
+        "/api/credentials/report",
+        json={"TG_REPORT_BOT_TOKEN": "report-token", "TG_REPORT_NOTIFY_CHAT_ID": "102"},
+        headers=headers,
+    )
+    assert response.status_code == 200
+    saved = dotenv_values(config.parent / ".env")
+    assert saved["TG_MONITOR_BOT_TOKEN"] == "monitor-token"
+    assert saved["TG_REPORT_NOTIFY_CHAT_ID"] == "102"
+
+    class FakeNotifier:
+        async def send(self, text):
+            assert "测试成功" in text
+
+        async def close(self):
+            pass
+
+    factory = Mock(return_value=FakeNotifier())
+    monkeypatch.setattr("tg_butler.app.make_notifier", factory)
+    response = client.post("/api/notify-test", json={"role": "monitor"}, headers=headers)
+    assert response.status_code == 200
+    factory.assert_called_once()
+    assert factory.call_args.args[1].notify_chat_id == 101
 
 
 def test_ai_models_and_connection_use_current_form_values(web, monkeypatch):
