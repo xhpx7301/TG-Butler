@@ -121,10 +121,12 @@ async def run(settings: Settings, credentials: Credentials) -> None:
                     and not same_notifier
                     and report_alert_matches(group, text, event.message)
                 ):
-                    report_notifier.enqueue(
+                    report_notifier.enqueue_copy(
                         f"🎯 {group.name or group.id} · {stamp}\n"
                         f"{sender_name}（{event.sender_id}）\n{text[:6000]}\n"
-                        f"{message_link(event.chat_id, event.id)}"
+                        f"{message_link(event.chat_id, event.id)}",
+                        event.chat_id,
+                        event.id,
                     )
         except Exception as exc:
             log.error(
@@ -136,7 +138,7 @@ async def run(settings: Settings, credentials: Credentials) -> None:
         await send_daily(
             settings,
             store,
-            report_notifier,
+            monitor_notifier,
             now.date() - timedelta(days=1),
             credentials.summary_api_key.get_secret_value(),
         )
@@ -163,9 +165,9 @@ async def run(settings: Settings, credentials: Credentials) -> None:
             )
         workers = [asyncio.create_task(item.worker()) for item in notifiers]
         # Fail startup when the notification channel is not usable.
-        await monitor_notifier.send("🟢 TG-Butler 监控服务已启动。")
+        await monitor_notifier.send("🟢 TG-Butler 关注-日报服务已启动。")
         if not same_notifier:
-            await report_notifier.send("🟢 TG-Butler 日报服务已启动。")
+            await report_notifier.send("🟢 TG-Butler 自定义通知服务已启动。")
         if settings.summary.enabled:
             scheduler.add_job(
                 daily,
@@ -180,7 +182,7 @@ async def run(settings: Settings, credentials: Credentials) -> None:
                 run_checkin,
                 trigger(job.at),
                 id=f"checkin:{job.name}",
-                args=[client, job, store, report_notifier, settings.timezone],
+                args=[client, job, store, monitor_notifier, settings.timezone],
                 coalesce=True,
                 max_instances=1,
                 misfire_grace_time=60,

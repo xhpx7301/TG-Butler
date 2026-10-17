@@ -25,10 +25,13 @@ def chunks(text: str, size: int = 3500) -> list[str]:
 
 class Notifier:
     def __init__(self, token: str, chat_id: int, queue_size: int = 500):
-        self._url = f"https://api.telegram.org/bot{token}/sendMessage"
+        self._base_url = f"https://api.telegram.org/bot{token}"
+        self._url = f"{self._base_url}/sendMessage"
         self.chat_id = chat_id
         self.http = httpx.AsyncClient(timeout=30)
-        self.queue: asyncio.Queue[str] = asyncio.Queue(maxsize=queue_size)
+        self.queue: asyncio.Queue[tuple[str, int | None, int | None]] = asyncio.Queue(
+            maxsize=queue_size
+        )
         self.lock = asyncio.Lock()
         self.dropped = 0
 
@@ -71,8 +74,14 @@ class Notifier:
         raise RuntimeError("Telegram notification attempts exhausted")
 
     def enqueue(self, text: str) -> None:
+        self._enqueue((text, None, None))
+
+    def enqueue_copy(self, text: str, from_chat_id: int, message_id: int) -> None:
+        self._enqueue((text, from_chat_id, message_id))
+
+    def _enqueue(self, item: tuple[str, int | None, int | None]) -> None:
         try:
-            self.queue.put_nowait(text)
+            self.queue.put_nowait(item)
         except asyncio.QueueFull:
             self.dropped += 1
             log.warning(
@@ -81,7 +90,7 @@ class Notifier:
 
     async def worker(self) -> None:
         while True:
-            text = await self.queue.get()
+            text, from_chat_id, message_id = await self.queue.get()
             try:
                 if self.dropped:
                     count = self.dropped
@@ -90,10 +99,30 @@ class Notifier:
                     )
                     self.dropped -= count
                 await self.send(text)
+                if from_chat_id is not None and message_id is not None:
+                    await self._copy_message(from_chat_id, message_id)
             except Exception as exc:
                 log.error("Notification delivery failed (%s)", type(exc).__name__)
             finally:
                 self.queue.task_done()
+
+    async def _copy_message(self, from_chat_id: int, message_id: int) -> None:
+        try:
+            response = await self.http.post(
+                f"{self._base_url}/copyMessage",
+                json={
+                    "chat_id": self.chat_id,
+                    "from_chat_id": from_chat_id,
+                    "message_id": message_id,
+                },
+            )
+        except httpx.TransportError:
+            raise RuntimeError("Telegram original message copy failed (network error)") from None
+        if response.status_code != 200 or response.json().get("ok") is not True:
+            raise RuntimeError(
+                f"Telegram original message copy rejected (HTTP {response.status_code}); "
+                "ensure the custom bot can access the source group"
+            )
 
     async def close(self) -> None:
         await self.http.aclose()

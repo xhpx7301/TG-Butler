@@ -1,3 +1,4 @@
+import asyncio
 from datetime import UTC, date, datetime
 from pathlib import Path
 from types import SimpleNamespace
@@ -294,6 +295,28 @@ async def test_notification_retry_and_token_not_in_error():
     with pytest.raises(RuntimeError) as caught:
         await notifier.send("hello")
     assert "SENSITIVE_TOKEN" not in str(caught.value)
+    await notifier.close()
+
+
+async def test_custom_notification_copies_original_message():
+    notifier = Notifier("fake", 123)
+    requests = []
+
+    async def handler(request):
+        requests.append((request.url.path, request.read()))
+        return httpx.Response(200, json={"ok": True})
+
+    await notifier.http.aclose()
+    notifier.http = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    notifier.enqueue_copy("matched alert", -100123, 456)
+    worker = asyncio.create_task(notifier.worker())
+    await notifier.queue.join()
+    worker.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await worker
+    assert [path.rsplit("/", 1)[-1] for path, _ in requests] == ["sendMessage", "copyMessage"]
+    assert b'"from_chat_id":-100123' in requests[1][1]
+    assert b'"message_id":456' in requests[1][1]
     await notifier.close()
 
 
