@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import time
 from datetime import datetime, timedelta
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from dotenv import dotenv_values
@@ -13,6 +14,7 @@ from telethon.errors import SessionPasswordNeededError
 from telethon.utils import get_display_name
 
 from tg_butler.app import connect_authorized, make_client
+from tg_butler.checkin import run_checkin
 from tg_butler.config import ApplicationCredentials, load_settings
 from tg_butler.store import Store
 from tg_butler.summary import day_bounds
@@ -70,6 +72,34 @@ class TelegramGateway:
                 self.pending = {}
                 return {"status": "authorized", "message": "Telegram 账号登录成功。"}
             await connect_authorized(client)
+            if action == "checkin-test":
+                name = str(data.get("name", "")).strip()
+                job = next((item for item in settings.checkins if item.name == name), None)
+                if job is None:
+                    raise ValueError("未找到已保存的签到任务，请先保存签到设置")
+                dialogs = await client.get_dialogs()
+                if not any(item.id == job.chat_id for item in dialogs):
+                    raise ValueError("签到群组不在当前账号的群组列表中")
+
+                class TestNotifier:
+                    def enqueue(self, _text):
+                        pass
+
+                store = Store(Path(":memory:"))
+                try:
+                    await run_checkin(client, job, store, TestNotifier(), settings.timezone)
+                    run = store.runs()[0]
+                    labels = {
+                        "confirmed": "测试签到已确认成功",
+                        "rejected": "测试签到收到失败回复",
+                        "timeout": "测试签到命令已发送，但等待回复超时",
+                        "sent": "测试签到命令已发送（未配置回复机器人）",
+                        "uncertain": "测试签到发送结果不确定，请查看群内记录",
+                        "error": "测试签到执行失败，请查看群内记录",
+                    }
+                    return {"message": labels.get(run["status"], "测试签到已执行")}
+                finally:
+                    store.close()
             dialogs = await client.get_dialogs()
             if action == "dialogs":
                 return {
@@ -159,7 +189,7 @@ class TelegramGateway:
             active = self.control("status").strip() == "active"
             if active:
                 self.control("stop")
-            timeout = 180 if action == "history" else 60
+            timeout = 660 if action == "checkin-test" else 180 if action == "history" else 60
             try:
                 return asyncio.run(
                     asyncio.wait_for(self.request(action, data, owner), timeout=timeout)

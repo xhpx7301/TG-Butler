@@ -47,7 +47,7 @@ function addCheckin(job={}){const grid=record("checkin-list",job.name||"签到�
   ["success_pattern","成功回复正则（可选）",job.success_pattern,"根据实际回复填写，例如 签到成功|已签到。"],
   ["failure_pattern","失败回复正则（可选）",job.failure_pattern,"例如 签到失败|无权限；留空不匹配失败回复。"],
   ["timeout_seconds","等待回复秒数",job.timeout_seconds||60,"1–600；超时会标记结果未确认。","number"],
-  ["require_reply","仅匹配回复本次命令",job.require_reply!==false,"推荐打开，避免把其他人的成功回复算给你。","checkbox"]])inputField(grid,key,label,value,help,type||"text");}
+  ["require_reply","仅匹配回复本次命令",job.require_reply!==false,"推荐打开，避免把其他人的成功回复算给你。","checkbox"]])inputField(grid,key,label,value,help,type||"text");const test=document.createElement("button");test.type="button";test.className="secondary";test.textContent="测试签到";test.title="真实发送此任务的签到命令，不占用当天正式签到次数";test.onclick=async()=>{const name=grid.querySelector('[data-key="name"]').value.trim();if(!name){toast("请填写任务名称",true);return;}if(!confirm(`将使用已保存的“${name}”任务向目标群真实发送签到命令，并等待回复；不会占用当天正式签到次数。继续吗？`))return;test.disabled=true;try{toast((await api("checkin-test",{name})).message);}catch(error){toast(error.message,true);}finally{test.disabled=false;}};grid.parentElement.append(test);}
 function records(id){return [...$(id).querySelectorAll(".record")].map(box=>{const values={...box._original};box.querySelectorAll("[data-key]").forEach(input=>values[input.dataset.key]=input.type==="checkbox"?input.checked:input.value.trim());return values;});}
 function integer(value,label){if(!/^-?\d+$/.test(String(value)))throw Error(label+"需要填写数字");const result=Number(value);if(!Number.isSafeInteger(result))throw Error(label+"超出支持范围");return result;}
 function setModelOptions(models, selected=""){

@@ -320,6 +320,12 @@ def create_app(config: Path, *, control=system_control) -> Flask:
             raise ValueError("无效 Telegram 操作")
         return jsonify(gateway.execute(action, request.get_json(), session["revision"]))
 
+    @app.post("/api/checkin-test")
+    @protected
+    def checkin_test():
+        result = gateway.execute("checkin-test", request.get_json() or {}, session["revision"])
+        return jsonify(result)
+
     @app.post("/api/notify-test")
     @protected
     def notify_test():

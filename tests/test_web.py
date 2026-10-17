@@ -263,6 +263,21 @@ def test_summary_test_sends_preview_without_recording_run(web, monkeypatch):
     send.assert_awaited_once()
 
 
+def test_checkin_test_requires_login_and_runs_named_saved_task(web, monkeypatch):
+    app, _, _ = web
+    client = app.test_client()
+    assert client.post("/api/checkin-test", json={"name": "job"}).status_code == 403
+    headers = authenticate(client)
+    execute = Mock(return_value={"message": "测试签到已确认成功"})
+    monkeypatch.setattr("tg_butler.web.TelegramGateway.execute", execute)
+    response = client.post("/api/checkin-test", json={"name": "job"}, headers=headers)
+    assert response.status_code == 200
+    assert response.json["message"] == "测试签到已确认成功"
+    execute.assert_called_once()
+    assert execute.call_args.args[:2] == ("checkin-test", {"name": "job"})
+    assert execute.call_args.args[2]
+
+
 def test_password_validation_and_hash_storage(tmp_path):
     store = AdminStore(tmp_path)
     assert store.get() is None
