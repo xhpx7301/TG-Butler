@@ -23,9 +23,9 @@
 <div class="notice">配置保存后，请点击“重启任务服务”使其生效。密钥不会回显。Telegram 登录与查群操作会短暂停止任务，结束后恢复。</div>
 <section data-section="overview">
 <div class="stats"><article><p>监控群组</p><strong id="count-groups">0</strong><small>有选择地关注消息</small></article><article><p>签到任务</p><strong id="count-checkins">0</strong><small>发送与成功确认分别记录</small></article><article><p>日报时间</p><strong id="summary-time">—</strong><small id="timezone-label"></small></article></div>
-<article><h2>任务服务</h2><p class="muted">网页后台与任务服务独立运行，停止监控不会关闭本页面。</p><div class="buttons"><button data-service="start">启动任务服务</button><button data-service="restart" class="secondary">重启任务服务</button><button data-service="stop" class="danger">停止任务服务</button><button data-service="logs" class="ghost">查看最近日志</button></div><pre id="service-output" hidden></pre></article>
+<article><h2>任务服务</h2><p class="muted">网页后台与任务服务独立运行，停止监控不会关闭本页面。</p><div class="buttons"><button data-service="start">启动任务服务</button><button data-service="restart" class="secondary">重启任务服务</button><button data-service="stop" class="danger">停止任务服务</button><button data-service="logs" class="ghost">查看最近日志</button><button id="update-project" class="secondary">更新 TG-Butler</button></div><pre id="service-output" hidden></pre><p class="hint">更新会从 GitHub 拉取 main 分支最新脚本，更新依赖并短暂重启网页和任务服务；配置、凭据、Telegram 会话及数据会保留。更新期间网页可能短暂无法访问，请稍后刷新。</p></article>
 <article><h2>最近执行记录</h2><p class="muted">confirmed 表示匹配成功回复；sent 仅表示已发送；timeout 表示结果未确认。</p><div class="table-scroll"><table><thead><tr><th>日期</th><th>类型</th><th>任务 / 群组</th><th>结果</th></tr></thead><tbody id="runs"></tbody></table></div></article>
-<article><h2>开始使用</h2><ol class="steps"><li>填写 Telegram 应用凭据，并完成账号登录。</li><li>配置通知机器人，发送一条测试通知。</li><li>选择监控群组、关注用户，按需添加日报和签到任务。</li><li>启动任务服务，确认机器人收到启动通知。</li></ol><p class="hint">脚本升级请在服务器运行 bu，选择 6 更新脚本。网页不提供执行系统命令的入口。</p></article>
+<article><h2>开始使用</h2><ol class="steps"><li>填写 Telegram 应用凭据，并完成账号登录。</li><li>配置通知机器人，发送一条测试通知。</li><li>选择监控群组、关注用户，按需添加日报和签到任务。</li><li>启动任务服务，确认机器人收到启动通知。</li></ol><p class="hint">需要升级时，点击上方“更新 TG-Butler”；也可以在服务器运行 bu，选择 6 更新脚本。网页只提供固定的项目更新操作，不提供执行任意系统命令的入口。</p></article>
 </section>
 <section data-section="telegram" hidden>
 <article><h2>账号应用凭据</h2><p class="muted">用于登录你的个人 Telegram 账号，读取已加入的群消息、发送签到命令。与通知机器人的 Token 不同。</p>

@@ -48,7 +48,7 @@ SECTIONS = {
 
 
 def system_control(action: str) -> str:
-    if action not in {"status", "start", "stop", "restart", "logs"}:
+    if action not in {"status", "start", "stop", "restart", "logs", "update"}:
         raise ValueError("不支持的服务操作")
     command = ["sudo", "-n", "/usr/local/libexec/tg-butler-control", action]
     result = subprocess.run(command, capture_output=True, text=True, timeout=30, check=False)
@@ -276,6 +276,14 @@ def create_app(config: Path, *, control=system_control) -> Flask:
         if action not in {"start", "stop", "restart", "logs"}:
             raise ValueError("无效服务操作")
         return jsonify(message=control(action) or "服务操作已提交，请查看状态与启动通知。")
+
+    @app.post("/api/update")
+    @protected
+    def update():
+        return jsonify(
+            message=control("update")
+            or "更新已开始，网页会短暂断开；完成后请刷新页面确认版本和服务状态。"
+        )
 
     def ai_request_values(body: dict, *, require_model: bool = True) -> tuple[str, str, str]:
         api_url = str(body.get("api_url", "")).strip()

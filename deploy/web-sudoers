@@ -1,2 +1,2 @@
 # Installed root-owned, mode 0440; do not grant arbitrary systemctl or shell access.
-tgbutler ALL=(root) NOPASSWD: /usr/local/libexec/tg-butler-control status, /usr/local/libexec/tg-butler-control start, /usr/local/libexec/tg-butler-control stop, /usr/local/libexec/tg-butler-control restart, /usr/local/libexec/tg-butler-control logs
+tgbutler ALL=(root) NOPASSWD: /usr/local/libexec/tg-butler-control status, /usr/local/libexec/tg-butler-control start, /usr/local/libexec/tg-butler-control stop, /usr/local/libexec/tg-butler-control restart, /usr/local/libexec/tg-butler-control logs, /usr/local/libexec/tg-butler-control update

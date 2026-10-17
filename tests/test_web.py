@@ -49,6 +49,15 @@ def test_all_private_data_requires_admin_and_writes_require_csrf(web):
     control.assert_called_once_with("start")
 
 
+def test_update_requires_authentication_and_uses_fixed_control_action(web):
+    app, _, control = web
+    client = app.test_client()
+    assert client.post("/api/update", json={}).status_code == 403
+    headers = authenticate(client)
+    assert client.post("/api/update", json={}, headers=headers).status_code == 200
+    control.assert_called_once_with("update")
+
+
 def test_secret_values_not_returned_to_browser(web):
     app, _, _ = web
     client = app.test_client()
