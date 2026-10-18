@@ -41,7 +41,7 @@ async def execute(args) -> None:
         print("尚未连接 Telegram；账号权限、通知目标和签到回复规则需实际验证。")
         return
     if args.command == "run":
-        await run(settings, load_credentials(args.config))
+        await run(settings, load_credentials(args.config), args.config)
         return
     if args.command in {"login", "dialogs", "members"}:
         credentials = load_application_credentials(args.config)

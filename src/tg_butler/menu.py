@@ -181,7 +181,7 @@ class Menu:
     def apply(self) -> None:
         if self.active():
             self.command(["systemctl", "restart", SERVICE])
-            print("已保存并重启运行中的服务。请确认启动通知，或使用菜单查看日志。")
+            print("已保存并重启运行中的服务；可使用菜单查看服务状态和日志。")
         else:
             print("已保存。服务当前未运行，完成配置后选择“启动服务”。")
 
@@ -440,7 +440,7 @@ class Menu:
         self.cli("check-config")
         self.command(["systemctl", "reset-failed", SERVICE])
         self.command(["systemctl", "enable", "--now", SERVICE])
-        print("已请求启动。请通过机器人启动通知与日志确认连接正常。")
+        print("已请求启动；可通过网页或菜单查看服务状态和日志。")
 
     def update(self) -> bool:
         print("更新将拉取 GitHub main、安装依赖并更新菜单和服务文件。配置和数据保留。")

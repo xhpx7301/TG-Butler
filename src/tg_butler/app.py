@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import re
+import signal
 from contextlib import suppress
 from datetime import datetime, timedelta
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -12,6 +15,7 @@ from apscheduler.triggers.cron import CronTrigger
 from telethon import TelegramClient, events
 from telethon.utils import get_display_name
 
+from tg_butler.bot_menu import TelegramMenu
 from tg_butler.checkin import run_checkin
 from tg_butler.config import (
     ApplicationCredentials,
@@ -73,7 +77,9 @@ async def connect_authorized(client) -> None:
         raise RuntimeError("Telegram session missing or expired; run tg-butler login first")
 
 
-async def run(settings: Settings, credentials: Credentials) -> None:
+async def run(
+    settings: Settings, credentials: Credentials, config_path: Path | None = None
+) -> None:
     store = Store(settings.data_dir / "butler.sqlite3")
     monitor_credentials = credentials.notification("monitor")
     report_credentials = credentials.notification("report")
@@ -91,6 +97,13 @@ async def run(settings: Settings, credentials: Credentials) -> None:
     scheduler = AsyncIOScheduler(timezone=settings.timezone)
     zone = ZoneInfo(settings.timezone)
     groups = {group.id: group for group in settings.groups}
+    menu = None
+    menu_task = None
+
+    async def restart_after_menu_change() -> None:
+        # Let the confirmation message leave Telegram before systemd restarts us.
+        await asyncio.sleep(1)
+        os.kill(os.getpid(), signal.SIGTERM)
 
     async def on_message(event):
         group = groups.get(event.chat_id)
@@ -164,10 +177,13 @@ async def run(settings: Settings, credentials: Credentials) -> None:
                 on_message, events.NewMessage(chats=list(groups), incoming=True)
             )
         workers = [asyncio.create_task(item.worker()) for item in notifiers]
-        # Fail startup when the notification channel is not usable.
-        await monitor_notifier.send("🟢 TG-Butler 关注-日报服务已启动。")
-        if not same_notifier:
-            await report_notifier.send("🟢 TG-Butler 自定义通知服务已启动。")
+        menu = TelegramMenu(
+            monitor_credentials.bot_token.get_secret_value(),
+            monitor_credentials.notify_chat_id,
+            config_path or settings.data_dir.parent / "config.yaml",
+            on_changed=restart_after_menu_change,
+        )
+        menu_task = asyncio.create_task(menu.run())
         if settings.summary.enabled:
             scheduler.add_job(
                 daily,
@@ -200,6 +216,12 @@ async def run(settings: Settings, credentials: Credentials) -> None:
         )
         await client.run_until_disconnected()
     finally:
+        if menu is not None:
+            await menu.close()
+        if menu_task is not None:
+            menu_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await menu_task
         if scheduler.running:
             scheduler.shutdown(wait=False)
             # APScheduler schedules its shutdown on the event loop.

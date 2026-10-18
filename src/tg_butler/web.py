@@ -285,7 +285,7 @@ def create_app(config: Path, *, control=system_control) -> Flask:
     def service(action):
         if action not in {"start", "stop", "restart", "logs"}:
             raise ValueError("无效服务操作")
-        return jsonify(message=control(action) or "服务操作已提交，请查看状态与启动通知。")
+        return jsonify(message=control(action) or "服务操作已提交，请查看服务状态与日志。")
 
     @app.post("/api/update")
     @protected
