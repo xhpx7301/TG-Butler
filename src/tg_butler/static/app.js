@@ -2,6 +2,7 @@
 let csrf = "", state = null;
 const $ = id => document.getElementById(id);
 const titles = {overview:"运行概览",telegram:"Telegram 账号",notification:"通知机器人",groups:"群组与关注用户",summary:"日报与 AI",checkins:"定时签到",system:"运行设置",admin:"管理员账户"};
+const pageSummaries = {overview:"每分钟查看监控、通知、日报和最近执行记录。",telegram:"连接个人 Telegram 账号，读取群组消息并执行任务。",notification:"管理提醒机器人和接收通知的目标。",groups:"选择监控范围，查询群组与成员数字 ID。",summary:"配置每日摘要、模型服务和测试发送。",checkins:"设置每日命令、回复规则和签到时间。",system:"调整时区、消息留存和通知队列。",admin:"管理网页后台的登录账号与安全会话。"};
 let toastTimer;
 function toast(message, error=false) { $("toast").textContent=message; $("toast").className=error?"error":""; $("toast").hidden=false; clearTimeout(toastTimer); toastTimer=setTimeout(()=>$("toast").hidden=true,9000); }
 async function api(path, data) {
@@ -15,11 +16,11 @@ function fields(form){ return Object.fromEntries(new FormData(form)); }
 function fill(id, data){ const form=$(id); for(const [key,value] of Object.entries(data)){const field=form.elements.namedItem(key);if(!field)continue;if(field.type==="checkbox")field.checked=!!value;else field.value=value??"";} }
 function bindForm(id, handler){ $(id).addEventListener("submit",async event=>{event.preventDefault();const buttons=[...event.target.querySelectorAll("button")];buttons.forEach(b=>b.disabled=true);try{await handler(fields(event.target),event.target);}catch(error){toast(error.message,true);}finally{buttons.forEach(b=>b.disabled=false);}}); }
 function bindButton(id, handler){ $(id).addEventListener("click",async()=>{const button=$(id);button.disabled=true;try{await handler();}catch(error){toast(error.message,true);}finally{button.disabled=false;}}); }
-function navigate(page){document.querySelectorAll("[data-section]").forEach(s=>s.hidden=s.dataset.section!==page);document.querySelectorAll("[data-page]").forEach(b=>b.classList.toggle("selected",b.dataset.page===page));$("page-title").textContent=titles[page];}
+function navigate(page){document.querySelectorAll("[data-section]").forEach(s=>s.hidden=s.dataset.section!==page);document.querySelectorAll("[data-page]").forEach(b=>b.classList.toggle("selected",b.dataset.page===page));$("page-title").textContent=titles[page];$("page-summary").textContent=pageSummaries[page]||"";}
 async function load(){
   state=await api("state"); $("login").hidden=true;$("dashboard").hidden=false;
   const config=state.config, summary=config.summary||{};
-  $("service-badge").textContent=state.service==="active"?"任务运行中":"任务未运行";$("service-badge").className="badge"+(state.service==="active"?"":" off");
+  const serviceActive=state.service==="active";$("service-badge").textContent=serviceActive?"任务运行中":"任务未运行";$("service-badge").className="badge"+(serviceActive?"":" off");$("service-state-card").textContent=serviceActive?"运行中":"未运行";$("service-panel-dot").textContent=serviceActive?"在线":"离线";$("service-panel-dot").className="status-dot"+(serviceActive?"":" off");
   $("count-groups").textContent=(config.groups||[]).length;$("count-checkins").textContent=(config.checkins||[]).length;
   $("summary-time").textContent=summary.enabled===false?"已关闭":summary.at||"00:05";$("timezone-label").textContent=config.timezone||"Asia/Shanghai";
   fill("application-form",{TG_API_ID:state.credentials.TG_API_ID||"",TG_API_HASH:""});
