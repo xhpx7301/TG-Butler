@@ -16,7 +16,7 @@ function fields(form){ return Object.fromEntries(new FormData(form)); }
 function fill(id, data){ const form=$(id); for(const [key,value] of Object.entries(data)){const field=form.elements.namedItem(key);if(!field)continue;if(field.type==="checkbox")field.checked=!!value;else field.value=value??"";} }
 function bindForm(id, handler){ $(id).addEventListener("submit",async event=>{event.preventDefault();const buttons=[...event.target.querySelectorAll("button")];buttons.forEach(b=>b.disabled=true);try{await handler(fields(event.target),event.target);}catch(error){toast(error.message,true);}finally{buttons.forEach(b=>b.disabled=false);}}); }
 function bindButton(id, handler){ $(id).addEventListener("click",async()=>{const button=$(id);button.disabled=true;try{await handler();}catch(error){toast(error.message,true);}finally{button.disabled=false;}}); }
-function navigate(page){document.querySelectorAll("[data-section]").forEach(s=>s.hidden=s.dataset.section!==page);document.querySelectorAll("[data-page]").forEach(b=>b.classList.toggle("selected",b.dataset.page===page));$("page-title").textContent=titles[page];$("page-summary").textContent=pageSummaries[page]||"";}
+function navigate(page){document.querySelectorAll("[data-section]").forEach(s=>s.hidden=s.dataset.section!==page);document.querySelectorAll("[data-page]").forEach(b=>b.classList.toggle("selected",b.dataset.page===page));$("page-title").textContent=titles[page];$("page-summary").textContent=pageSummaries[page]||"";$("global-notice").hidden=page!=="overview";}
 async function load(){
   state=await api("state"); $("login").hidden=true;$("dashboard").hidden=false;
   const config=state.config, summary=config.summary||{};
