@@ -74,7 +74,7 @@ bindButton("report-notify-test",async()=>toast((await api("notify-test",{role:"r
 bindButton("fetch-models",async()=>showModels((await api("ai/models",aiFormValues())).models));
 bindButton("test-ai",async()=>toast((await api("ai/test",aiFormValues())).message));
 bindButton("test-summary",async()=>{if(!confirm("将发送前一天的测试日报到通知机器人，且不会记录为正式日报。继续吗？"))return;toast((await api("summary-test",{})).message);});
-bindButton("update-project",async()=>{if(!confirm("将从 GitHub 拉取 main 分支最新代码并更新依赖，随后短暂重启网页和任务服务。配置、凭据和数据会保留，继续吗？"))return;const result=await api("update",{});$("service-output").hidden=false;$("service-output").textContent=result.message;toast("更新已开始，网页会短暂断开；完成后请刷新页面确认状态。");});
+bindButton("update-project",async()=>{const result=await api("update",{});$("service-output").hidden=false;$("service-output").textContent=result.message;toast("更新已开始，页面将在 10 秒后自动刷新。");window.setTimeout(()=>window.location.reload(),10000);});
 $("summary-model-select").addEventListener("change",event=>$("summary-model-manual").value=event.target.value);
 bindButton("add-group",()=>addGroup());bindButton("add-checkin",()=>addCheckin());
 bindButton("save-groups",()=>saveConfig(config=>config.groups=records("group-list").map(row=>({...row,id:integer(row.id,"群组 ID"),watch_users:row.watch_users.replaceAll("，",",").split(",").filter(x=>x.trim()).map(x=>integer(x.trim(),"关注用户 ID")),report_keywords:row.report_keywords.replaceAll("，",",").split(",").map(x=>x.trim()).filter(Boolean),report_match_mode:row.report_match_mode.trim().toLowerCase()||"any",report_images:row.report_images,report_links:row.report_links}))));
