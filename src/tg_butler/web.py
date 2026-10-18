@@ -194,6 +194,16 @@ def create_app(config: Path, *, control=system_control) -> Flask:
     def revision():
         return hashlib.sha256(config.read_bytes()).hexdigest()
 
+    def apply_saved_changes() -> str:
+        """Reload saved settings without starting a deliberately stopped service."""
+        if control("status").strip() != "active":
+            return "任务服务当前未运行，保存的修改将在下次启动时生效。"
+        try:
+            control("restart")
+        except (ValueError, OSError, subprocess.TimeoutExpired):
+            return "任务服务自动重启失败，请检查概览中的服务状态与日志。"
+        return "任务服务已自动重启，保存的修改已生效。"
+
     @app.get("/api/state")
     @protected
     def state():
@@ -248,7 +258,7 @@ def create_app(config: Path, *, control=system_control) -> Flask:
             ):
                 raise ValueError("网页不能修改数据目录")
             save_settings(config, new, locked=True)
-        return jsonify(message="配置已保存，点击“重启任务服务”使修改生效。")
+        return jsonify(message="配置已保存。" + apply_saved_changes())
 
     @app.post("/api/credentials/<section>")
     @protected
@@ -268,7 +278,7 @@ def create_app(config: Path, *, control=system_control) -> Flask:
             if section == "ai" and supplied.get("clear_key") is True:
                 values["SUMMARY_API_KEY"] = ""
             save_credentials(root / ".env", values, section, locked=True)
-        return jsonify(message="凭据已保存，重启任务服务后生效。密钥不会回传至浏览器。")
+        return jsonify(message="凭据已保存。" + apply_saved_changes() + "密钥不会回传至浏览器。")
 
     @app.post("/api/service/<action>")
     @protected

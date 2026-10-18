@@ -107,6 +107,27 @@ def test_stale_config_and_invalid_input_never_overwrite(web):
     )
 
 
+def test_saving_config_restarts_only_an_active_task_service(web):
+    app, _, control = web
+    control.side_effect = lambda action: "active" if action == "status" else "restarted"
+    client = app.test_client()
+    headers = authenticate(client)
+    state = client.get("/api/state").json
+    changed = state["config"] | {"retention_days": 7}
+
+    response = client.post(
+        "/api/config", json={"revision": state["revision"], "config": changed}, headers=headers
+    )
+
+    assert response.status_code == 200
+    assert "自动重启" in response.json["message"]
+    assert [call.args[0] for call in control.call_args_list] == [
+        "status",
+        "status",
+        "restart",
+    ]
+
+
 def test_admin_password_change_and_bu_reset_revoke_all_sessions(web):
     app, config, _ = web
     first, other = app.test_client(), app.test_client()
