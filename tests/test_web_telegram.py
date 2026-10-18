@@ -6,6 +6,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 from telethon.errors import SessionPasswordNeededError
+from telethon.tl.types import User
 
 from tg_butler.menu import save_settings
 from tg_butler.web_telegram import TelegramGateway
@@ -69,6 +70,55 @@ def test_stopped_task_service_not_started_by_web_lookup(gateway):
     result = manager.execute("dialogs", {}, "owner")
     assert result["items"] == [{"id": -100123, "name": "群组"}]
     control.assert_called_once_with("status")
+
+
+async def test_resolve_group_link_returns_group_id(gateway):
+    manager, client, _ = gateway
+    client.is_user_authorized.return_value = True
+    group = SimpleNamespace(id=-100123, title="Example group", username="example")
+    client.get_entity.return_value = group
+
+    result = await manager.request(
+        "resolve", {"kind": "group", "reference": "https://t.me/example?start=1"}, "owner"
+    )
+
+    assert result == {
+        "id": -100123,
+        "name": "Example group",
+        "username": "example",
+        "kind": "group",
+    }
+    client.get_entity.assert_awaited_once_with("example")
+
+
+async def test_resolve_user_username_returns_user_id(gateway):
+    manager, client, _ = gateway
+    client.is_user_authorized.return_value = True
+    client.get_entity.return_value = User(
+        id=42, is_self=False, first_name="Example", username="example"
+    )
+
+    result = await manager.request("resolve", {"kind": "user", "reference": "@example"}, "owner")
+
+    assert result == {
+        "id": 42,
+        "name": "Example",
+        "username": "example",
+        "kind": "user",
+    }
+    client.get_entity.assert_awaited_once_with("example")
+
+
+async def test_resolve_rejects_private_invite_links(gateway):
+    manager, client, _ = gateway
+    client.is_user_authorized.return_value = True
+
+    with pytest.raises(ValueError, match="私密邀请链接"):
+        await manager.request(
+            "resolve", {"kind": "group", "reference": "https://t.me/+secret"}, "owner"
+        )
+
+    client.get_entity.assert_not_awaited()
 
 
 async def test_history_import_stores_previous_complete_day_and_deduplicates(gateway):

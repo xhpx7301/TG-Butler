@@ -11,6 +11,7 @@ from zoneinfo import ZoneInfo
 from dotenv import dotenv_values
 from filelock import FileLock
 from telethon.errors import SessionPasswordNeededError
+from telethon.tl.types import User
 from telethon.utils import get_display_name
 
 from tg_butler.app import connect_authorized, make_client
@@ -102,12 +103,12 @@ class TelegramGateway:
                     store.close()
             dialogs = await client.get_dialogs()
             if action == "dialogs":
+                items = []
+                for item in dialogs:
+                    if item.is_group or item.is_channel:
+                        items.append({"id": item.id, "name": item.name})
                 return {
-                    "items": [
-                        {"id": item.id, "name": item.name}
-                        for item in dialogs
-                        if item.is_group or item.is_channel
-                    ]
+                    "items": items
                 }
             if action == "members":
                 chat_id = int(data.get("chat_id", 0))
@@ -124,6 +125,39 @@ class TelegramGateway:
                         }
                     )
                 return {"items": items}
+            if action == "resolve":
+                reference = str(data.get("reference", "")).strip().removeprefix("@")
+                kind = str(data.get("kind", "")).strip()
+                if kind not in {"group", "user"}:
+                    raise ValueError("无效的查询类型")
+                if not reference:
+                    raise ValueError("请输入群组链接或用户名")
+                for prefix in (
+                    "https://t.me/",
+                    "http://t.me/",
+                    "https://telegram.me/",
+                    "http://telegram.me/",
+                ):
+                    if reference.lower().startswith(prefix):
+                        reference = reference[len(prefix) :].split("?", 1)[0].split("/", 1)[0]
+                        break
+                if not reference or reference.startswith(("+", "joinchat/", "c/")):
+                    raise ValueError("暂不支持私密邀请链接，请输入公开群组链接或 @用户名")
+                entity = await client.get_entity(reference)
+                is_user = isinstance(entity, User)
+                if kind == "group" and is_user:
+                    raise ValueError("该地址对应的是用户，请输入群组链接或群组用户名")
+                if kind == "user" and not is_user:
+                    raise ValueError("该地址对应的是群组，请输入用户 @用户名")
+                return {
+                    "id": entity.id,
+                    "name": get_display_name(entity)
+                    or getattr(entity, "title", None)
+                    or getattr(entity, "name", "")
+                    or "",
+                    "username": getattr(entity, "username", "") or "",
+                    "kind": "user" if is_user else "group",
+                }
             if action == "history":
                 chat_id = int(data.get("chat_id", 0))
                 days = int(data.get("days", 1))
