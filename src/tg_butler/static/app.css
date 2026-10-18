@@ -51,3 +51,55 @@ header{margin-bottom:18px}
 .steps li span{grid-row:1 / span 2;color:#9aa7b8;font-size:11px;font-weight:700}.steps li b{font-size:11px}.steps li small{font-size:10px;line-height:1.4;margin:1px 0 0}
 @media(max-width:1080px){.overview-stats{grid-template-columns:repeat(2,1fr)}.overview-columns{grid-template-columns:1fr}.setup-panel{grid-template-columns:1fr}.steps{grid-template-columns:repeat(4,1fr)}}
 @media(max-width:680px){aside{width:auto;padding:16px}main{margin:0;padding:20px 15px}.overview-stats{grid-template-columns:1fr 1fr;gap:9px}.metric-card{min-height:105px;padding:14px 12px}.metric-card strong{font-size:22px}.metric-card small{font-size:10px}.overview-columns article,.activity-panel,.setup-panel{padding:16px}.quick-links{grid-template-columns:1fr}.update-row{align-items:flex-start;flex-direction:column}.steps{grid-template-columns:1fr 1fr;gap:6px}.steps li{padding:8px}.page-summary{font-size:12px}.notice{font-size:10px}}
+
+/* Shared page shell for configuration screens. */
+nav button{display:flex;align-items:center;gap:10px}
+nav button:before{display:inline-grid;place-items:center;width:18px;color:#9aa7b8;font-size:15px;line-height:1}
+nav button.selected:before{color:currentColor}
+nav button[data-page="overview"]:before{content:"⌂"}nav button[data-page="telegram"]:before{content:"◉"}nav button[data-page="notification"]:before{content:"♢"}nav button[data-page="groups"]:before{content:"⌘"}nav button[data-page="summary"]:before{content:"▤"}nav button[data-page="checkins"]:before{content:"↯"}nav button[data-page="system"]:before{content:"⚙"}nav button[data-page="admin"]:before{content:"◎"}
+section[data-section]:not([data-section="overview"]){display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+section[data-section]:not([data-section="overview"])>article{margin:0;padding:22px;border-radius:11px}
+section[data-section]:not([data-section="overview"])>article>h2{font-size:17px;margin-bottom:4px}
+section[data-section]:not([data-section="overview"])>article>p.muted{font-size:12px;margin-bottom:18px}
+section[data-section]:not([data-section="overview"])>article>form{margin-top:18px}
+section[data-section]:not([data-section="overview"])>article>form>button{margin-top:2px}
+section[data-section="telegram"]>article:first-child{border-top:3px solid var(--accent)}
+section[data-section="telegram"]>article:nth-child(2){border-top:3px solid var(--teal)}
+section[data-section="telegram"]>article:nth-child(3){grid-column:1/-1;border-top:3px solid var(--amber)}
+section[data-section="notification"]>article{grid-column:1/-1;border-top:3px solid var(--violet)}
+section[data-section="groups"]>article:first-child{border-top:3px solid var(--accent)}
+section[data-section="groups"]>article:nth-child(2){grid-column:1/-1;border-top:3px solid var(--teal)}
+section[data-section="summary"]>article:first-child{grid-column:1/-1;border-top:3px solid var(--violet)}
+section[data-section="summary"]>article:nth-child(2){border-top:3px solid var(--amber)}
+section[data-section="checkins"]>article{grid-column:1/-1;border-top:3px solid var(--teal)}
+section[data-section="system"]>article{grid-column:1/-1;border-top:3px solid var(--accent)}
+section[data-section="admin"]>article{grid-column:1/-1;border-top:3px solid var(--violet)}
+section[data-section]:not([data-section="overview"]) .grid{gap:0 18px}
+section[data-section]:not([data-section="overview"]) label{margin-bottom:17px}
+section[data-section]:not([data-section="overview"]) .hint{margin-top:13px}
+section[data-section="groups"] .inline-form{margin-top:10px}
+section[data-section="groups"] #telegram-items{margin-top:18px}
+section[data-section="groups"] #group-list{margin-top:18px}
+section[data-section="checkins"] #checkin-list{margin-top:18px}
+.record{background:#fbfcfe;border-color:#e6ebf2;padding:16px;margin-bottom:12px}
+.record-heading{margin-bottom:12px}.record-heading b{font-size:13px;color:#41516a}
+section[data-section="notification"] h3{font-size:14px;margin:0 0 14px;color:#41516a}
+section[data-section="notification"] .grid>form{padding:16px;border:1px solid var(--line);border-radius:9px;background:#fbfcfe}
+section[data-section="notification"] .grid>form label:last-of-type{margin-bottom:4px}
+section[data-section="summary"] .field-action{margin-top:5px}
+section[data-section="summary"] .field-action+input{margin-top:8px}
+section[data-section="system"] .grid,section[data-section="admin"] .grid{max-width:900px}
+section[data-section="admin"] #admin-form>label{max-width:440px}
+.table-scroll{border:1px solid var(--line);border-radius:8px}
+section[data-section="overview"]+.page-divider{display:none}
+.login-shell{background:#f4f6f9;padding:28px}
+.login-card{width:min(920px,94vw);display:grid;grid-template-columns:1.05fr .95fr;padding:0;overflow:hidden;border-radius:13px;box-shadow:0 18px 55px #25385912}
+.login-copy{padding:52px 48px;background:#f2f7ff;border-right:1px solid #dce8fa}
+.login-copy .brand-mark{margin-bottom:25px}
+.login-copy h1{font-size:28px;line-height:1.35;margin:0 0 14px;max-width:390px}
+.login-copy .muted{max-width:420px;font-size:14px}
+.login-copy ul{list-style:none;padding:0;margin:28px 0 0;display:grid;gap:11px;color:#526884;font-size:12px}
+.login-copy li{display:flex;align-items:center;gap:9px}.login-copy li:before{content:"✓";display:grid;place-items:center;width:20px;height:20px;border-radius:50%;background:#dcecff;color:var(--accent);font-weight:700}
+.login-form-panel{padding:52px 48px;background:#fff}.login-form-panel h2{font-size:22px;margin:0 0 4px}.login-form-panel>.muted{font-size:13px}.login-form-panel form{margin-top:26px}
+.login-form-panel .hint{font-size:11px;line-height:1.65}
+@media(max-width:800px){section[data-section]:not([data-section="overview"]){grid-template-columns:1fr}section[data-section]:not([data-section="overview"])>article,section[data-section="telegram"]>article:nth-child(3),section[data-section="groups"]>article:nth-child(2),section[data-section="summary"]>article:first-child,section[data-section="checkins"]>article,section[data-section="system"]>article,section[data-section="admin"]>article{grid-column:auto}.login-card{grid-template-columns:1fr}.login-copy{padding:32px 28px;border-right:0;border-bottom:1px solid #dce8fa}.login-form-panel{padding:32px 28px}}
