@@ -6,7 +6,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 from telethon.errors import SessionPasswordNeededError
-from telethon.tl.types import User
+from telethon.tl.types import Channel, User
 
 from tg_butler.menu import save_settings
 from tg_butler.web_telegram import TelegramGateway
@@ -75,7 +75,14 @@ def test_stopped_task_service_not_started_by_web_lookup(gateway):
 async def test_resolve_group_link_returns_group_id(gateway):
     manager, client, _ = gateway
     client.is_user_authorized.return_value = True
-    group = SimpleNamespace(id=-100123, title="Example group", username="example")
+    group = Channel(
+        id=1512125956,
+        title="Example group",
+        username="example",
+        photo=None,
+        date=None,
+        megagroup=True,
+    )
     client.get_entity.return_value = group
 
     result = await manager.request(
@@ -83,7 +90,7 @@ async def test_resolve_group_link_returns_group_id(gateway):
     )
 
     assert result == {
-        "id": -100123,
+        "id": -1001512125956,
         "name": "Example group",
         "username": "example",
         "kind": "group",

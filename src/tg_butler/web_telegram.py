@@ -12,7 +12,7 @@ from dotenv import dotenv_values
 from filelock import FileLock
 from telethon.errors import SessionPasswordNeededError
 from telethon.tl.types import User
-from telethon.utils import get_display_name
+from telethon.utils import get_display_name, get_peer_id
 
 from tg_butler.app import connect_authorized, make_client
 from tg_butler.checkin import run_checkin
@@ -150,7 +150,9 @@ class TelegramGateway:
                 if kind == "user" and not is_user:
                     raise ValueError("该地址对应的是群组，请输入用户 @用户名")
                 return {
-                    "id": entity.id,
+                    # Use Telethon's marked peer ID so channels/supergroups match
+                    # dialog IDs (for example, -1001234567890).
+                    "id": get_peer_id(entity),
                     "name": get_display_name(entity)
                     or getattr(entity, "title", None)
                     or getattr(entity, "name", "")
