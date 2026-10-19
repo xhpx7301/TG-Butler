@@ -131,3 +131,89 @@ section[data-section="notification"] .grid>form{padding:12px}section[data-sectio
 .record{padding:12px;margin-bottom:8px}.record-heading{margin-bottom:9px}
 footer{margin-top:22px}
 @media(max-width:680px){aside{width:auto;padding:13px 14px}.brand{padding:0}.nav-label{display:none}nav{display:flex;flex-direction:row;overflow:auto;margin-top:16px;gap:4px}.nav-group{display:flex;gap:4px}.nav-group+.nav-group{border:0;padding:0}.nav-group button{white-space:nowrap;padding:7px 10px}.aside-bottom{margin-top:7px;padding:0}.main{margin:0}main{padding:17px 13px}.notice{font-size:9px}.metric-card{min-height:92px;padding:11px 10px}.metric-card strong{font-size:20px}.overview-columns article,.activity-panel{padding:14px}.setup-panel{display:none}}
+
+/* Mobile layout: keep navigation reachable and controls comfortable to tap. */
+@media(max-width:680px){
+  body{font-size:14px;line-height:1.55}
+  aside{position:sticky;top:0;z-index:5;padding:10px 14px 8px;box-shadow:0 2px 10px #1725390a}
+  .brand{min-height:36px;gap:8px;font-size:23px}
+  .brand span{font-size:16px}.brand small{font-size:10px}
+  nav{margin:8px -14px 0;padding:0 14px 5px;gap:6px;overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:none}
+  nav::-webkit-scrollbar{display:none}
+  .nav-group{flex:0 0 auto;gap:4px}
+  .nav-group+.nav-group{padding:0 0 0 6px;border-left:1px solid var(--line)}
+  nav button{min-height:40px;padding:8px 11px;font-size:12px}
+  nav button:before{width:15px;font-size:14px}
+  .aside-bottom{margin:2px 0 0;min-height:30px;justify-content:space-between;font-size:11px}
+  .aside-bottom button{min-height:32px;padding:4px 8px;font-size:11px}
+  main{padding:17px 14px calc(24px + env(safe-area-inset-bottom))}
+  header{align-items:flex-start;gap:10px;margin-bottom:14px}
+  header>div:first-child{min-width:0}
+  h1{font-size:22px;line-height:1.3;letter-spacing:0}
+  .eyebrow{font-size:9px;letter-spacing:1px}
+  .page-summary{font-size:12px;line-height:1.5}
+  .header-actions{flex:0 0 auto;flex-direction:column;align-items:stretch;gap:5px}
+  .header-actions .badge{text-align:center;white-space:nowrap;font-size:10px;padding:4px 8px}
+  .header-actions button{min-height:38px;padding:6px 12px}
+  .notice{font-size:11px;line-height:1.55;padding:10px 12px;margin-bottom:14px}
+  article,.overview-columns article,.activity-panel,.setup-panel{padding:15px;border-radius:8px}
+  .overview-stats{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-bottom:12px}
+  .metric-card{min-width:0;min-height:100px;padding:12px 10px;gap:8px}
+  .metric-icon{flex-basis:26px;width:26px;height:26px;font-size:14px}
+  .metric-card p{font-size:11px}.metric-card strong{font-size:20px;overflow-wrap:anywhere}
+  .metric-card small{font-size:10px;line-height:1.4}
+  .overview-columns{gap:10px;margin-bottom:12px}
+  .panel-heading,.section-heading{gap:9px}
+  .panel-heading h2,.section-heading h2{font-size:16px}
+  .panel-heading .muted,.section-heading .muted{font-size:11px}
+  .service-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+  .service-actions button{min-height:42px;padding:8px;font-size:11px}
+  .update-row{gap:10px}.update-row button{min-height:40px}
+  .quick-links{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+  .quick-links button{min-height:58px;grid-template-columns:22px minmax(0,1fr);padding:8px}
+  .quick-links b{font-size:11px;overflow-wrap:anywhere}.quick-links small{font-size:9px}
+  .activity-panel .panel-heading{align-items:flex-start}
+  .activity-panel th,.activity-panel td{padding:8px 7px;white-space:nowrap}
+  section[data-section]:not([data-section="overview"]){gap:10px}
+  section[data-section]:not([data-section="overview"])>article{padding:15px}
+  section[data-section]:not([data-section="overview"])>article>h2{font-size:16px}
+  section[data-section]:not([data-section="overview"])>article>p.muted{font-size:12px;line-height:1.55}
+  .grid{grid-template-columns:minmax(0,1fr);gap:0}
+  section[data-section]:not([data-section="overview"]) .grid{grid-template-columns:minmax(0,1fr);gap:0}
+  label{font-size:12px;margin-bottom:13px}
+  input,select{min-height:44px;padding:10px 11px;font-size:16px}
+  input[type="checkbox"]{min-height:20px;width:20px;height:20px;flex:0 0 20px}
+  .check{min-height:44px;align-items:center;gap:10px}
+  button{min-height:44px;padding:10px 13px;font-size:13px}
+  .buttons{align-items:stretch;gap:7px}
+  .buttons button{flex:1 1 auto;min-height:44px}
+  .inline-form{align-items:stretch;flex-direction:column;gap:4px}
+  .inline-form label{margin-bottom:8px}
+  .inline-form button{width:100%;margin:0}
+  .field-action{align-items:stretch;flex-direction:column}
+  .field-action button{width:100%}
+  .record{padding:12px;margin-bottom:9px;border-radius:7px}
+  .record-heading{align-items:center;gap:8px}
+  .record-heading b{min-width:0;overflow-wrap:anywhere}
+  .record-heading button{min-height:38px;padding:6px 12px}
+  .section-heading>button{flex:0 0 auto;min-height:40px;padding:7px 10px;font-size:11px}
+  .table-scroll{max-width:100%;overscroll-behavior-x:contain}
+  pre{max-width:100%;padding:12px;font-size:11px}
+  footer{gap:8px;flex-wrap:wrap;font-size:10px}
+  .login-shell{min-height:100svh;padding:18px 14px}
+  .login-card{width:100%;max-width:440px;display:block;border-radius:10px}
+  .login-copy{display:none}
+  .login-form-panel{padding:25px 20px}
+  .login-form-panel h2{font-size:20px}
+  .login-form-panel form{margin-top:21px}
+  #toast{right:12px;bottom:calc(12px + env(safe-area-inset-bottom));left:12px;max-width:none;padding:13px 15px;font-size:13px}
+}
+@media(max-width:380px){
+  main{padding-right:11px;padding-left:11px}
+  .overview-stats{gap:6px}
+  .metric-card{padding:10px 8px;gap:6px}
+  .metric-card small{font-size:9px}
+  .header-actions .badge{font-size:9px;padding:4px 6px}
+  .quick-links{grid-template-columns:1fr}
+  .login-form-panel{padding:22px 17px}
+}
