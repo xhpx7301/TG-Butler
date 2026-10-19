@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from tg_butler.bot_menu import TelegramMenu
+from tg_butler.bot_menu import MAIN_KEYBOARD, SETTINGS_KEYBOARD, TelegramMenu
 from tg_butler.menu import save_settings
 
 
@@ -58,3 +58,42 @@ async def test_menu_rejects_invalid_parameter_without_writing(menu):
     with pytest.raises(ValueError, match="范围"):
         await menu.handle_text("0")
     assert menu._read().get("retention_days", 30) == 30
+
+
+@pytest.mark.asyncio
+async def test_menu_uses_inline_keyboard_and_handles_button_callback(menu):
+    await menu.handle_text("/menu")
+    assert menu.send.await_args.kwargs["keyboard"] == MAIN_KEYBOARD
+    assert "inline_keyboard" in menu.send.await_args.kwargs["keyboard"]
+    menu._call = AsyncMock(return_value=True)
+
+    await menu.handle_callback(
+        {
+            "id": "callback-1",
+            "data": "menu:settings",
+            "message": {"chat": {"id": 456}, "from": {"id": 456}},
+        }
+    )
+
+    assert menu._call.await_args_list[0].args[0] == "answerCallbackQuery"
+    assert menu.send.await_args.kwargs["keyboard"] == SETTINGS_KEYBOARD
+    assert "keyboard" not in menu.send.await_args.kwargs["keyboard"]
+
+
+@pytest.mark.asyncio
+async def test_menu_polling_subscribes_to_callback_updates(menu):
+    calls = []
+
+    async def call(method, payload):
+        calls.append((method, payload))
+        if method == "getUpdates":
+            menu._stopped = True
+            return []
+        return {}
+
+    menu._call = call
+
+    await menu.run()
+
+    get_updates = next(payload for method, payload in calls if method == "getUpdates")
+    assert get_updates["allowed_updates"] == ["message", "callback_query"]

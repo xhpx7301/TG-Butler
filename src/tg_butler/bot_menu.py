@@ -17,14 +17,37 @@ from tg_butler.menu import save_settings
 log = logging.getLogger(__name__)
 
 MAIN_KEYBOARD = {
-    "keyboard": [
-        [{"text": "📊 运行状态"}, {"text": "⚙️ 配置参数"}],
-        [{"text": "👥 监控群组"}, {"text": "⏰ 签到任务"}],
-        [{"text": "🧾 日报设置"}, {"text": "❓ 帮助"}],
+    "inline_keyboard": [
+        [
+            {"text": "📊 运行状态", "callback_data": "menu:status"},
+            {"text": "⚙️ 配置参数", "callback_data": "menu:settings"},
+        ],
+        [
+            {"text": "👥 监控群组", "callback_data": "menu:groups"},
+            {"text": "⏰ 签到任务", "callback_data": "menu:checkins"},
+        ],
+        [
+            {"text": "🧾 日报设置", "callback_data": "menu:summary"},
+            {"text": "❓ 帮助", "callback_data": "menu:help"},
+        ],
     ],
-    "resize_keyboard": True,
 }
-BACK_KEYBOARD = {"keyboard": [[{"text": "⬅️ 返回主菜单"}]], "resize_keyboard": True}
+BACK_KEYBOARD = {
+    "inline_keyboard": [[{"text": "⬅️ 返回主菜单", "callback_data": "menu:main"}]]
+}
+SETTINGS_KEYBOARD = {
+    "inline_keyboard": [
+        [
+            {"text": "🕐 日报时间", "callback_data": "setting:summary_at"},
+            {"text": "🌏 时区", "callback_data": "setting:timezone"},
+        ],
+        [
+            {"text": "🗑 保留天数", "callback_data": "setting:retention_days"},
+            {"text": "📦 通知队列", "callback_data": "setting:queue_size"},
+        ],
+        [{"text": "⬅️ 返回主菜单", "callback_data": "menu:main"}],
+    ]
+}
 
 
 class TelegramMenu:
@@ -58,6 +81,9 @@ class TelegramMenu:
             raise RuntimeError(f"Telegram 菜单请求失败（HTTP {response.status_code}）")
         return data.get("result")
 
+    async def _answer_callback(self, callback_id: str) -> None:
+        await self._call("answerCallbackQuery", {"callback_query_id": callback_id})
+
     async def send(self, text: str, *, keyboard: dict | None = None) -> None:
         payload = {"chat_id": self.admin_chat_id, "text": text}
         if keyboard is not None:
@@ -77,9 +103,10 @@ class TelegramMenu:
 
     @staticmethod
     def _is_admin(update: dict, admin_chat_id: int) -> bool:
-        message = update.get("message") or {}
+        callback = update.get("callback_query") or {}
+        message = callback.get("message") or update.get("message") or {}
         chat = message.get("chat") or {}
-        user = message.get("from") or {}
+        user = callback.get("from") or message.get("from") or {}
         return int(chat.get("id", 0)) == admin_chat_id and int(user.get("id", 0)) == admin_chat_id
 
     async def _status(self) -> None:
@@ -103,15 +130,8 @@ class TelegramMenu:
             f"时区：{settings.timezone}\n"
             f"消息留存：{settings.retention_days} 天\n"
             f"通知队列：{settings.notifications.queue_size}\n\n"
-            "点击下方项目后发送新值。",
-            keyboard={
-                "keyboard": [
-                    [{"text": "🕐 日报时间"}, {"text": "🌏 时区"}],
-                    [{"text": "🗑 保留天数"}, {"text": "📦 通知队列"}],
-                    [{"text": "⬅️ 返回主菜单"}],
-                ],
-                "resize_keyboard": True,
-            },
+            "点击下方项目后输入新值。",
+            keyboard=SETTINGS_KEYBOARD,
         )
 
     async def _groups(self) -> None:
@@ -327,6 +347,40 @@ class TelegramMenu:
         else:
             await self.send("无法识别该选项，请发送 /menu 返回主菜单。", keyboard=MAIN_KEYBOARD)
 
+    async def handle_callback(self, callback: dict) -> None:
+        callback_id = str(callback.get("id", ""))
+        data = str(callback.get("data", ""))
+        if callback_id:
+            await self._answer_callback(callback_id)
+        if data == "menu:main":
+            await self.handle_text("/menu")
+        elif data == "menu:status":
+            await self._status()
+        elif data == "menu:settings":
+            await self._settings()
+        elif data == "menu:groups":
+            await self._groups()
+        elif data == "menu:checkins":
+            await self._checkins()
+        elif data == "menu:summary":
+            await self._summary()
+        elif data == "menu:help":
+            await self._help()
+        elif data.startswith("setting:"):
+            key = data.removeprefix("setting:")
+            if key not in {"summary_at", "timezone", "retention_days", "queue_size"}:
+                raise ValueError("不支持的配置项")
+            self.pending = key
+            prompts = {
+                "summary_at": "请输入日报时间，例如 08:30。",
+                "timezone": "请输入 IANA 时区，例如 Asia/Shanghai。",
+                "retention_days": "请输入消息保留天数（1–3650）。",
+                "queue_size": "请输入通知队列容量（1–10000）。",
+            }
+            await self.send(prompts[key], keyboard=BACK_KEYBOARD)
+        else:
+            raise ValueError("菜单选项已失效，请重新发送 /menu")
+
     async def _change_summary_command(self, command: str) -> None:
         value = command.removeprefix("/summary_at ").strip()
         self.pending = "summary_at"
@@ -356,18 +410,24 @@ class TelegramMenu:
             while not self._stopped:
                 updates = await self._call(
                     "getUpdates",
-                    {"offset": self.offset, "timeout": 25, "allowed_updates": ["message"]},
+                    {
+                        "offset": self.offset,
+                        "timeout": 25,
+                        "allowed_updates": ["message", "callback_query"],
+                    },
                 )
                 for update in updates or []:
                     self.offset = int(update["update_id"]) + 1
                     if not self._is_admin(update, self.admin_chat_id):
                         continue
-                    message = update.get("message") or {}
-                    text = message.get("text")
-                    if not text:
-                        continue
                     try:
-                        await self.handle_text(text)
+                        if update.get("callback_query"):
+                            await self.handle_callback(update["callback_query"])
+                        else:
+                            message = update.get("message") or {}
+                            text = message.get("text")
+                            if text:
+                                await self.handle_text(text)
                     except (ValueError, TypeError) as exc:
                         await self.send(f"⚠️ {exc}", keyboard=MAIN_KEYBOARD)
                     except Exception as exc:
