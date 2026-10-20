@@ -58,6 +58,24 @@ def test_update_requires_authentication_and_uses_fixed_control_action(web):
     control.assert_called_once_with("update")
 
 
+def test_telegram_identify_route_is_available(web):
+    app, _, _ = web
+    client = app.test_client()
+    headers = authenticate(client)
+    gateway = app.extensions["telegram_gateway"]
+    gateway.execute = Mock(return_value={"items": [{"id": 42, "name": "Example"}]})
+
+    response = client.post(
+        "/api/telegram/identify",
+        json={"kind": "user", "ids": ["42"]},
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    assert response.json == {"items": [{"id": 42, "name": "Example"}]}
+    assert gateway.execute.call_args.args[:2] == ("identify", {"kind": "user", "ids": ["42"]})
+
+
 def test_backup_api_create_download_schedule_and_import(web):
     import io
 

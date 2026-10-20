@@ -76,6 +76,7 @@ def create_app(config: Path, *, control=system_control) -> Flask:
     )
     gateway = TelegramGateway(config, control)
     app.extensions["admin_store"] = admin
+    app.extensions["telegram_gateway"] = gateway
     from tg_butler.backup import create_backup, read_schedule
 
     backup_scheduler = BackgroundScheduler(timezone="UTC")
@@ -458,6 +459,7 @@ def create_app(config: Path, *, control=system_control) -> Flask:
             "dialogs",
             "members",
             "resolve",
+            "identify",
             "history",
         }:
             raise ValueError("无效 Telegram 操作")

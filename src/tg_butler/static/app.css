@@ -101,7 +101,8 @@ section[data-section="lookup"] .inline-form{margin-top:10px}
 section[data-section="lookup"] .group-list-actions{margin-top:12px}
 section[data-section="lookup"] #telegram-items{margin-top:18px}
 section[data-section="groups"] #group-list{margin-top:18px}
-section[data-section="checkins"] #checkin-list{margin-top:18px}
+section[data-section="checkins"] #checkin-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:start;gap:12px;margin-top:12px}
+section[data-section="checkins"] #checkin-list>.record{min-width:0;margin:0;padding:14px}
 .record{background:#fbfcfe;border-color:#e6ebf2;padding:16px;margin-bottom:12px}
 .record-heading{margin-bottom:12px}.record-heading b{font-size:13px;color:#41516a}
 section[data-section="summary"] .field-action{margin-top:5px}
@@ -348,6 +349,13 @@ section[data-section="groups"] .hint{line-height:1.55}
   section[data-section="lookup"] .inline-form{gap:4px;align-items:stretch}
   section[data-section="lookup"] .inline-form button{margin-bottom:0}
 }
+
+@media(max-width:1080px){section[data-section="checkins"] #checkin-list{grid-template-columns:1fr}}
+section[data-section="checkins"] #checkin-list .identity-control{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:7px;margin-top:6px}
+section[data-section="checkins"] #checkin-list .identity-control input{min-width:0;margin:0}
+section[data-section="checkins"] #checkin-list .identity-control button{padding:8px 11px;white-space:nowrap}
+section[data-section="checkins"] #checkin-list .identity-control small{grid-column:1/-1;margin:0;overflow-wrap:anywhere}
+section[data-section="checkins"] #checkin-list .identity-control small:empty{display:none}
 
 section[data-section="groups"] #group-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:start;gap:10px 12px;margin-top:12px}
 section[data-section="groups"] #group-list .record{min-width:0;margin:0;padding:13px}
