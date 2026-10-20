@@ -85,6 +85,8 @@ def test_legacy_tasks_default_to_default_account_and_unknown_account_is_rejected
     )
     assert settings.groups[0].account_id == "default"
     assert settings.checkins[0].account_id == "default"
+    assert settings.groups[0].enabled is True
+    assert settings.checkins[0].enabled is True
     with pytest.raises(ValidationError):
         Settings.model_validate({"groups": [{"id": 1, "account_id": "missing"}]})
 
@@ -281,6 +283,16 @@ async def test_summary_failure_is_recorded_and_other_groups_continue(store):
     await send_daily(settings, store, notifier, date(2026, 10, 15))
     assert notifier.send.await_count == 2
     assert {row["name"]: row["status"] for row in store.runs()} == {"1": "failed", "2": "sent"}
+
+
+async def test_disabled_groups_are_omitted_from_scheduled_and_test_summaries(store):
+    settings = Settings(groups=[Group(id=1, enabled=False), Group(id=2)])
+    notifier = FakeNotifier()
+
+    await send_daily(settings, store, notifier, date(2026, 10, 15))
+    assert await send_test_daily(settings, store, notifier, date(2026, 10, 15)) == 1
+    assert notifier.send.await_count == 2
+    assert {row["name"] for row in store.runs()} == {"2"}
 
 
 async def test_test_daily_sends_without_claiming_a_run(store):

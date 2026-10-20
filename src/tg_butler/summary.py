@@ -261,7 +261,7 @@ async def send_daily(
 ) -> None:
     start, end = day_bounds(day, settings.timezone)
     for group in settings.groups:
-        if not group.daily_summary:
+        if not group.enabled or not group.daily_summary:
             continue
         name, stamp = str(group.id), day.isoformat()
         if not store.claim("summary", name, stamp):
@@ -292,7 +292,7 @@ async def send_test_daily(
     start, end = day_bounds(day, settings.timezone)
     sent = 0
     for group in settings.groups:
-        if not group.daily_summary:
+        if not group.enabled or not group.daily_summary:
             continue
         digest = await build_digest(
             settings,

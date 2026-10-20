@@ -23,6 +23,7 @@ def time_parts(value: str) -> tuple[int, int]:
 
 class Group(StrictModel):
     id: int
+    enabled: bool = True
     account_id: str = "default"
     name: str = ""
     daily_summary: bool = True
@@ -43,6 +44,7 @@ class Group(StrictModel):
 
 class Checkin(StrictModel):
     name: str = Field(min_length=1)
+    enabled: bool = True
     account_id: str = "default"
     chat_id: int
     at: str

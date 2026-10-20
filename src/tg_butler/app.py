@@ -136,8 +136,8 @@ async def run(
         monitor_notifier if same_notifier else make_notifier(settings, report_credentials)
     )
     notifiers = [monitor_notifier] if same_notifier else [monitor_notifier, report_notifier]
-    active_account_ids = {group.account_id for group in settings.groups} | {
-        job.account_id for job in settings.checkins
+    active_account_ids = {group.account_id for group in settings.groups if group.enabled} | {
+        job.account_id for job in settings.checkins if job.enabled
     }
     active_account_ids.add("default")
     clients = {
@@ -148,7 +148,11 @@ async def run(
     scheduler = AsyncIOScheduler(timezone=settings.timezone)
     zone = ZoneInfo(settings.timezone)
     groups_by_account = {
-        account_id: {group.id: group for group in settings.groups if group.account_id == account_id}
+        account_id: {
+            group.id: group
+            for group in settings.groups
+            if group.enabled and group.account_id == account_id
+        }
         for account_id in clients
     }
     menu = None
@@ -226,7 +230,11 @@ async def run(
             dialogs = await client.get_dialogs()
             available = {dialog.id for dialog in dialogs}
             groups = groups_by_account[account_id]
-            jobs = [job for job in settings.checkins if job.account_id == account_id]
+            jobs = [
+                job
+                for job in settings.checkins
+                if job.enabled and job.account_id == account_id
+            ]
             required = set(groups) | {job.chat_id for job in jobs}
             missing = required - available
             if missing:
@@ -258,6 +266,8 @@ async def run(
                 misfire_grace_time=3600,
             )
         for job in settings.checkins:
+            if not job.enabled:
+                continue
             scheduler.add_job(
                 run_checkin,
                 trigger(job.at),
@@ -274,8 +284,8 @@ async def run(
         scheduler.start()
         log.info(
             "TG-Butler started: %d groups, %d check-ins, timezone=%s",
-            len(settings.groups),
-            len(settings.checkins),
+            sum(group.enabled for group in settings.groups),
+            sum(job.enabled for job in settings.checkins),
             settings.timezone,
         )
         await asyncio.gather(*(client.run_until_disconnected() for client in clients.values()))
