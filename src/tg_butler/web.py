@@ -11,9 +11,11 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import yaml
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.cron import CronTrigger
 from dotenv import dotenv_values
 from filelock import Timeout
-from flask import Flask, jsonify, render_template, request, session
+from flask import Flask, jsonify, render_template, request, send_file, session
 from pydantic import ValidationError
 from waitress import serve
 
@@ -70,10 +72,37 @@ def create_app(config: Path, *, control=system_control) -> Flask:
         SESSION_COOKIE_SAMESITE="Strict",
         SESSION_COOKIE_SECURE=options["secure_cookie"],
         PERMANENT_SESSION_LIFETIME=timedelta(hours=8),
-        MAX_CONTENT_LENGTH=256 * 1024,
+        MAX_CONTENT_LENGTH=21 * 1024 * 1024,
     )
     gateway = TelegramGateway(config, control)
     app.extensions["admin_store"] = admin
+    from tg_butler.backup import create_backup, read_schedule
+
+    backup_scheduler = BackgroundScheduler(timezone="UTC")
+    app.extensions["backup_scheduler"] = backup_scheduler
+
+    def configure_backup_job(schedule: dict) -> None:
+        if schedule["enabled"]:
+            backup_scheduler.add_job(
+                create_backup,
+                CronTrigger(
+                    hour=int(schedule["at"][:2]),
+                    minute=int(schedule["at"][3:]),
+                    timezone=load_settings(config).timezone,
+                ),
+                args=[root, config],
+                id="daily-backup",
+                replace_existing=True,
+                coalesce=True,
+                max_instances=1,
+                misfire_grace_time=86400,
+            )
+        elif backup_scheduler.get_job("daily-backup"):
+            backup_scheduler.remove_job("daily-backup")
+
+    initial_schedule = read_schedule(root)
+    if config.is_file():
+        configure_backup_job(initial_schedule)
 
     def csrf():
         if "csrf" not in session:
@@ -100,7 +129,7 @@ def create_app(config: Path, *, control=system_control) -> Flask:
                 session.get("csrf", "").encode(), request.headers.get("X-CSRF-Token", "").encode()
             ) or not session.get("csrf"):
                 return jsonify(error="页面验证已失效，请刷新页面重试"), 403
-            if not request.is_json:
+            if not request.is_json and request.endpoint != "import_backup":
                 return jsonify(error="请使用 JSON 请求"), 415
 
     @app.after_request
@@ -258,6 +287,7 @@ def create_app(config: Path, *, control=system_control) -> Flask:
             ):
                 raise ValueError("网页不能修改数据目录")
             save_settings(config, new, locked=True)
+        configure_backup_job(read_schedule(root))
         return jsonify(message="配置已保存。" + apply_saved_changes())
 
     @app.post("/api/credentials/<section>")
@@ -294,6 +324,89 @@ def create_app(config: Path, *, control=system_control) -> Flask:
             message=control("update")
             or "更新已开始，网页会短暂断开；完成后请刷新页面确认版本和服务状态。"
         )
+
+    @app.get("/api/backups")
+    @protected
+    def backups():
+        from tg_butler.backup import list_backups, next_backup, read_schedule
+
+        return jsonify(
+            schedule=read_schedule(root),
+            next=next_backup(root, load_settings(config).timezone),
+            items=list_backups(root),
+        )
+
+    @app.post("/api/backups/schedule")
+    @protected
+    def backup_schedule():
+        from tg_butler.backup import next_backup, write_schedule
+
+        schedule = write_schedule(root, request.get_json() or {})
+        configure_backup_job(schedule)
+        return jsonify(schedule=schedule, next=next_backup(root, load_settings(config).timezone))
+
+    @app.post("/api/backups/create")
+    @protected
+    def create_backup_now():
+        target = create_backup(root, config)
+        return jsonify(message="备份已创建。", name=target.name)
+
+    @app.get("/api/backups/<name>")
+    @protected
+    def download_backup(name):
+        from tg_butler.backup import backup_dir
+
+        if (
+            Path(name).name != name
+            or not name.startswith("tg-butler-")
+            or not name.endswith(".tar.gz")
+        ):
+            raise ValueError("无效的备份文件名")
+        target = backup_dir(root) / name
+        if not target.is_file() or target.is_symlink():
+            return jsonify(error="备份文件不存在"), 404
+        return send_file(
+            target, mimetype="application/gzip", as_attachment=True, download_name=name
+        )
+
+    @app.post("/api/backups/import")
+    @protected
+    def import_backup():
+        import tempfile
+
+        from tg_butler.backup import (
+            backup_dir,
+            create_backup,
+            read_schedule,
+            restore_backup,
+            validate_backup,
+        )
+
+        upload = request.files.get("file")
+        if upload is None or not upload.filename:
+            raise ValueError("请选择 .tar.gz 备份文件")
+        with tempfile.NamedTemporaryFile(
+            dir=backup_dir(root), suffix=".upload", delete=False
+        ) as temp:
+            path = Path(temp.name)
+            upload.save(temp)
+        try:
+            if path.stat().st_size > 20 * 1024 * 1024:
+                raise ValueError("上传文件超过 20 MB 限制")
+            validate_backup(path)
+            create_backup(root, config)
+            was_running = control("status").strip() == "active"
+            if was_running:
+                control("stop")
+            try:
+                restore_backup(root, config, path)
+            finally:
+                if was_running:
+                    control("start")
+        finally:
+            path.unlink(missing_ok=True)
+        configure_backup_job(read_schedule(root))
+        return jsonify(message="备份已导入并恢复。恢复后的监控服务已重新启动，请刷新页面。")
 
     def ai_request_values(body: dict, *, require_model: bool = True) -> tuple[str, str, str]:
         api_url = str(body.get("api_url", "")).strip()
@@ -350,6 +463,7 @@ def create_app(config: Path, *, control=system_control) -> Flask:
         import asyncio
 
         from tg_butler.app import make_notifier
+
         async def send():
             values = dotenv_values(root / ".env")
             role = str((request.get_json() or {}).get("role", "monitor"))
@@ -357,9 +471,7 @@ def create_app(config: Path, *, control=system_control) -> Flask:
                 raise ValueError("无效通知机器人角色")
             token_key = "TG_MONITOR_BOT_TOKEN" if role == "monitor" else "TG_REPORT_BOT_TOKEN"
             chat_key = (
-                "TG_MONITOR_NOTIFY_CHAT_ID"
-                if role == "monitor"
-                else "TG_REPORT_NOTIFY_CHAT_ID"
+                "TG_MONITOR_NOTIFY_CHAT_ID" if role == "monitor" else "TG_REPORT_NOTIFY_CHAT_ID"
             )
             credentials = NotificationCredentials(
                 bot_token=values.get(token_key) or values.get("TG_BOT_TOKEN", ""),
@@ -408,9 +520,7 @@ def create_app(config: Path, *, control=system_control) -> Flask:
             1,
             zone,
         )
-        report_sample = sample.replace(
-            "监控预警：目标用户已发言", "筛选提醒：目标用户消息命中条件"
-        )
+        report_sample = sample.replace("监控预警：目标用户已发言", "筛选提醒：目标用户消息命中条件")
 
         async def send():
             monitor_notifier = make_notifier(settings, monitor)
@@ -418,9 +528,7 @@ def create_app(config: Path, *, control=system_control) -> Flask:
                 monitor.bot_token.get_secret_value() == report.bot_token.get_secret_value()
                 and monitor.notify_chat_id == report.notify_chat_id
             )
-            report_notifier = (
-                monitor_notifier if same_notifier else make_notifier(settings, report)
-            )
+            report_notifier = monitor_notifier if same_notifier else make_notifier(settings, report)
             try:
                 await monitor_notifier.send(sample, parse_mode="HTML")
                 await report_notifier.send(report_sample, parse_mode="HTML")
@@ -438,6 +546,7 @@ def create_app(config: Path, *, control=system_control) -> Flask:
         import asyncio
 
         from tg_butler.app import make_notifier
+
         async def send():
             values = dotenv_values(root / ".env")
             credentials = NotificationCredentials(
@@ -476,12 +585,14 @@ def main():
     parser.add_argument("--config", type=Path, default=Path("/opt/tg-butler/config.yaml"))
     args = parser.parse_args()
     options = web_options(args.config.resolve().parent)
+    app = create_app(args.config)
+    app.extensions["backup_scheduler"].start()
     serve(
-        create_app(args.config),
+        app,
         host=options["host"],
         port=int(options["port"]),
         threads=4,
-        max_request_body_size=256 * 1024,
+        max_request_body_size=21 * 1024 * 1024,
         ident="TG-Butler",
     )
 

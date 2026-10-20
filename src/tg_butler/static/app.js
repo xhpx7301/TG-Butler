@@ -1,8 +1,8 @@
 "use strict";
 let csrf = "", state = null;
 const $ = id => document.getElementById(id);
-const titles = {overview:"运行概览",telegram:"Telegram 账号",notification:"通知机器人",groups:"群组与关注用户",summary:"日报与 AI",checkins:"定时签到",system:"运行设置",admin:"管理员账户"};
-const pageSummaries = {overview:"每分钟查看监控、通知、日报和最近执行记录。",telegram:"连接个人 Telegram 账号，读取群组消息并执行任务。",notification:"管理提醒机器人和接收通知的目标。",groups:"选择监控范围，查询群组与成员数字 ID。",summary:"配置每日摘要、模型服务和测试发送。",checkins:"设置每日命令、回复规则和签到时间。",system:"调整时区、消息留存和通知队列。",admin:"管理网页后台的登录账号与安全会话。"};
+const titles = {overview:"运行概览",telegram:"Telegram 账号",notification:"通知机器人",groups:"群组与关注用户",summary:"日报与 AI",checkins:"定时签到",system:"运行设置",backups:"备份与恢复",admin:"管理员账户"};
+const pageSummaries = {overview:"每分钟查看监控、通知、日报和最近执行记录。",telegram:"连接个人 Telegram 账号，读取群组消息并执行任务。",notification:"管理提醒机器人和接收通知的目标。",groups:"选择监控范围，查询群组与成员数字 ID。",summary:"配置每日摘要、模型服务和测试发送。",checkins:"设置每日命令、回复规则和签到时间。",system:"调整时区、消息留存和通知队列。",backups:"导出配置和运行数据，管理自动备份与恢复。",admin:"管理网页后台的登录账号与安全会话。"};
 let toastTimer;
 function toast(message, error=false) { $("toast").textContent=message; $("toast").className=error?"error":""; $("toast").hidden=false; clearTimeout(toastTimer); toastTimer=setTimeout(()=>$("toast").hidden=true,9000); }
 async function api(path, data) {
@@ -67,6 +67,7 @@ async function load(){
   fill("system-form",{timezone:config.timezone||"Asia/Shanghai",retention_days:config.retention_days||30,queue_size:(config.notifications||{}).queue_size||500});
   $("group-list").replaceChildren();(config.groups||[]).forEach(addGroup);
   $("checkin-list").replaceChildren();(config.checkins||[]).forEach(addCheckin);
+  await loadBackups();
   $("runs").replaceChildren();for(const row of state.runs){const tr=document.createElement("tr");for(const value of [row.day,row.kind,row.name,row.status]){const td=document.createElement("td");td.textContent=value;tr.append(td);}$("runs").append(tr);}
 }
 function inputField(container,key,label,value,help,type="text"){
@@ -111,6 +112,12 @@ bindButton("fetch-models",async()=>showModels((await api("ai/models",aiFormValue
 bindButton("test-ai",async()=>toast((await api("ai/test",aiFormValues())).message));
 bindButton("test-summary",async()=>{if(!confirm("将发送前一天的测试日报到通知机器人，且不会记录为正式日报。继续吗？"))return;toast((await api("summary-test",{})).message);});
 bindButton("update-project",async()=>{const result=await api("update",{});$("service-output").hidden=false;$("service-output").textContent=result.message;toast("更新已开始，页面将在 10 秒后自动刷新。");window.setTimeout(()=>window.location.reload(),10000);});
+function formatBytes(value){return value<1024*1024?`${(value/1024).toFixed(0)} KB`:`${(value/1024/1024).toFixed(1)} MB`;}
+async function loadBackups(){const data=await api("backups");const form=$("backup-schedule-form");form.elements.enabled.checked=data.schedule.enabled;form.elements.at.value=data.schedule.at;const timeOptions={timeZone:state.config.timezone};$("backup-next").textContent=data.next?`已启用，每日 ${data.schedule.at}（${state.config.timezone}）；下次执行：${new Date(data.next).toLocaleString(undefined,timeOptions)}`:"自动备份已关闭。";const list=$("backup-list");list.replaceChildren();if(!data.items.length){list.textContent="暂无备份";return;}for(const item of data.items){const link=document.createElement("a");link.href=`/api/backups/${encodeURIComponent(item.name)}`;link.className="backup-item";link.textContent=`${item.name} · ${formatBytes(item.size)}`;link.title=`创建时间：${new Date(item.created_at).toLocaleString()}`;list.append(link);}}
+bindButton("backup-create",async()=>{const result=await api("backups/create",{});await loadBackups();toast(result.message);});
+bindButton("backup-download",async()=>{const created=await api("backups/create",{});await loadBackups();const response=await fetch(`/api/backups/${encodeURIComponent(created.name)}`,{headers:{"X-CSRF-Token":csrf}});if(!response.ok)throw Error("下载备份失败");const url=URL.createObjectURL(await response.blob()),link=document.createElement("a");link.href=url;link.download=created.name;link.click();URL.revokeObjectURL(url);toast("最新备份已导出到本地。");});
+$("backup-schedule-form").addEventListener("submit",async event=>{event.preventDefault();const button=event.target.querySelector("button");button.disabled=true;try{await api("backups/schedule",{enabled:event.target.elements.enabled.checked,at:event.target.elements.at.value});await loadBackups();toast("备份计划已保存。");}catch(error){toast(error.message,true);}finally{button.disabled=false;}});
+$("backup-file").addEventListener("change",async event=>{const file=event.target.files[0];if(!file)return;if(file.size>20*1024*1024){toast("备份文件超过 20 MB 限制。",true);event.target.value="";return;}if(!confirm(`将导入 ${file.name} 并恢复其中的配置、凭据、Telegram 会话和消息记录；当前数据会先自动备份，管理员账户和访问设置会保留。继续吗？`)){event.target.value="";return;}const form=new FormData();form.append("file",file);try{const response=await fetch("/api/backups/import",{method:"POST",headers:{"X-CSRF-Token":csrf},body:form});const result=await response.json();if(!response.ok)throw Error(result.error||"导入失败");toast(result.message);await load();}catch(error){toast(error.message,true);}finally{event.target.value="";}});
 $("summary-model-select").addEventListener("change",event=>$("summary-model-manual").value=event.target.value);
 bindButton("add-group",()=>addGroup());bindButton("add-checkin",()=>addCheckin());
 function groupValues(box){const row={...box._original};box.querySelectorAll("[data-key]").forEach(input=>row[input.dataset.key]=input.type==="checkbox"?input.checked:input.value.trim());return {...row,id:integer(row.id,"群组 ID"),watch_users:row.watch_users.replaceAll("，",",").split(",").filter(x=>x.trim()).map(x=>integer(x.trim(),"关注用户 ID")),report_keywords:row.report_keywords.replaceAll("，",",").split(",").map(x=>x.trim()).filter(Boolean),report_match_mode:row.report_match_mode.trim().toLowerCase()||"any",report_images:row.report_images,report_links:row.report_links};}

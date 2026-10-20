@@ -343,7 +343,9 @@ sudo -u tgbutler /opt/tg-butler/.venv/bin/tg-butler --config /opt/tg-butler/conf
 sudo bash /opt/tg-butler/deploy/update.sh
 ```
 
-备份前先停止服务，再复制 `.env`、`config.yaml` 和整个 `data/`，并妥善加密保管。`data/` 包含 SQLite 数据库及可能的 WAL 文件，复制单个数据库文件可能丢失尚未合并的记录。
+网页“备份与恢复”页支持立即创建服务器备份、导出到本地、导入恢复，并可设置按运行时区执行的每日自动备份（服务器最多保留 30 份）。备份使用 SQLite 在线快照，包含 `.env`、`config.yaml`、监控消息数据库、Telegram 登录会话和自动备份计划；导入前会自动备份当前数据，并暂停正在运行的监控服务后恢复。管理员账号和网页监听/访问设置不会被备份覆盖。导入支持解压后总内容不超过 20 MB 的 TG-Butler `.tar.gz` 文件。
+
+备份包含通知机器人凭据、Telegram 账号会话和群组消息，等同于敏感登录凭据，请加密并妥善保管，不要上传到 GitHub 或转发给他人。恢复时沿用当前安装的数据目录位置，避免覆盖安装目录外的其他数据路径。
 
 ## 卸载与清除
 

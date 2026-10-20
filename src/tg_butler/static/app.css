@@ -65,6 +65,19 @@ nav button{display:flex;align-items:center;gap:10px}
 nav button:before{display:inline-grid;place-items:center;width:18px;color:#9aa7b8;font-size:15px;line-height:1}
 nav button.selected:before{color:currentColor}
 nav button[data-page="overview"]:before{content:"⌂"}nav button[data-page="telegram"]:before{content:"◉"}nav button[data-page="notification"]:before{content:"♢"}nav button[data-page="groups"]:before{content:"⌘"}nav button[data-page="summary"]:before{content:"▤"}nav button[data-page="checkins"]:before{content:"↯"}nav button[data-page="system"]:before{content:"⚙"}nav button[data-page="admin"]:before{content:"◎"}
+nav button[data-page="backups"]:before{content:"⇧"}
+.backup-operations{background:#f7faff;border-left:3px solid var(--accent)}
+.backup-schedule{background:#fffaf1;border-left:3px solid var(--amber)}
+.backup-schedule form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 16px;align-items:end}
+.backup-schedule form .check{margin:0;min-height:42px}
+.backup-schedule form button{grid-column:1/-1;justify-self:start}
+.backup-list-heading{margin-top:22px!important}
+.backup-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.backup-item{display:block;min-width:0;overflow-wrap:anywhere;padding:9px 11px;border:1px solid var(--line);border-radius:7px;background:white;color:var(--ink);text-decoration:none;font-size:12px;font-weight:650}
+.backup-item:hover{border-color:#b8cdef;background:#f6f9ff}
+.file-button{display:inline-flex;align-items:center;justify-content:center;min-height:38px;padding:8px 13px;border-radius:8px;color:#2360c1;background:var(--light);font-size:12px;font-weight:600;cursor:pointer}
+.file-button:hover{filter:brightness(.97)}
+@media(max-width:680px){.backup-schedule form,.backup-list{grid-template-columns:minmax(0,1fr)}.backup-schedule form button{grid-column:1}.file-button{min-height:44px}}
 section[data-section]:not([data-section="overview"]){display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
 section[data-section]:not([data-section="overview"])>article{margin:0;padding:22px;border-radius:11px}
 section[data-section]:not([data-section="overview"])>article>h2{font-size:17px;margin-bottom:4px}

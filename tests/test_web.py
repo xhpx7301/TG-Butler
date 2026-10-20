@@ -58,6 +58,48 @@ def test_update_requires_authentication_and_uses_fixed_control_action(web):
     control.assert_called_once_with("update")
 
 
+def test_backup_api_create_download_schedule_and_import(web):
+    import io
+
+    from tg_butler.backup import create_backup
+
+    app, config, _ = web
+    client = app.test_client()
+    headers = authenticate(client)
+    response = client.post("/api/backups/create", json={}, headers=headers)
+    assert response.status_code == 200
+    name = response.json["name"]
+    download = client.get(f"/api/backups/{name}")
+    assert download.status_code == 200
+    assert download.headers["Content-Type"] == "application/gzip"
+
+    response = client.post(
+        "/api/backups/schedule",
+        json={"enabled": True, "at": "04:25"},
+        headers=headers,
+    )
+    assert response.status_code == 200
+    assert response.json["schedule"] == {"enabled": True, "at": "04:25"}
+    assert response.json["next"]
+    assert app.extensions["backup_scheduler"].get_job("daily-backup") is not None
+    response = client.get("/api/backups", headers=headers)
+    assert response.json["schedule"] == {"enabled": True, "at": "04:25"}
+
+    archive = create_backup(config.parent, config)
+    config.write_text("data_dir: data\ngroups: []\ncheckins: []\n", encoding="utf-8")
+    before = (config.parent / "data" / "web.sqlite3").read_bytes()
+    response = client.post(
+        "/api/backups/import",
+        data={"file": (io.BytesIO(archive.read_bytes()), archive.name)},
+        headers=headers,
+        content_type="multipart/form-data",
+    )
+    assert response.status_code == 200, response.get_json()
+    assert "groups" in config.read_text(encoding="utf-8")
+    assert (config.parent / "data" / "web.sqlite3").read_bytes() == before
+    assert app.extensions["backup_scheduler"].get_job("daily-backup") is not None
+
+
 def test_secret_values_not_returned_to_browser(web):
     app, _, _ = web
     client = app.test_client()
@@ -224,8 +266,11 @@ def test_group_test_sends_monitor_and_report_templates_without_saving_changes(we
     headers = authenticate(client)
     save_settings(
         config,
-        {"groups": [{"id": -100123456, "name": "测试群", "watch_users": [7]}],
-         "checkins": [], "data_dir": "data"},
+        {
+            "groups": [{"id": -100123456, "name": "测试群", "watch_users": [7]}],
+            "checkins": [],
+            "data_dir": "data",
+        },
     )
     messages = []
 
@@ -278,9 +323,7 @@ def test_ai_models_and_connection_use_current_form_values(web, monkeypatch):
     response = client.post("/api/ai/test", json=payload, headers=headers)
     assert response.status_code == 200
     assert "OK" in response.json["message"]
-    connection.assert_awaited_once_with(
-        payload["api_url"], payload["model"], payload["api_key"]
-    )
+    connection.assert_awaited_once_with(payload["api_url"], payload["model"], payload["api_key"])
 
 
 def test_ai_models_can_use_saved_key_and_reject_missing_model(web, monkeypatch):
