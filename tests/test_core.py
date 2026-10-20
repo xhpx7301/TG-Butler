@@ -3,12 +3,13 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
+from zoneinfo import ZoneInfo
 
 import httpx
 import pytest
 from pydantic import ValidationError
 
-from tg_butler.app import report_alert_matches
+from tg_butler.app import live_alert, report_alert_matches
 from tg_butler.checkin import match_response, run_checkin
 from tg_butler.config import Checkin, Credentials, Group, Settings, load_settings
 from tg_butler.notify import Notifier, chunks
@@ -84,6 +85,27 @@ def test_report_filters_match_keywords_links_and_images():
     assert report_alert_matches(group, "这是重要项目 https://example.test", SimpleNamespace())
     assert report_alert_matches(group, "普通文字", image)
     assert not report_alert_matches(group, "只有重要", SimpleNamespace())
+
+
+def test_live_alert_is_structured_escaped_and_has_direct_link():
+    group = Group(id=-100123456, name="目标群组监控")
+    alert = live_alert(
+        group,
+        SimpleNamespace(username="alice"),
+        "Alice <管理员>",
+        8454584693,
+        "算了 & <好了>",
+        datetime(2026, 10, 20, 7, 58, tzinfo=UTC),
+        42,
+        ZoneInfo("Asia/Shanghai"),
+    )
+    assert "【监控预警：目标用户已发言】" in alert
+    assert "8454584693 | @alice" in alert
+    assert "-100123456（目标群组监控）" in alert
+    assert "2026/10/20 15:58:00" in alert
+    assert 'href="https://t.me/c/123456/42"' in alert
+    assert "Alice &lt;管理员&gt;" in alert
+    assert "算了 &amp; &lt;好了&gt;" in alert
 
 
 def test_notification_credentials_support_split_roles_and_legacy_fallback():
@@ -308,13 +330,14 @@ async def test_custom_notification_copies_original_message():
 
     await notifier.http.aclose()
     notifier.http = httpx.AsyncClient(transport=httpx.MockTransport(handler))
-    notifier.enqueue_copy("matched alert", -100123, 456)
+    notifier.enqueue_copy("matched alert", -100123, 456, parse_mode="HTML")
     worker = asyncio.create_task(notifier.worker())
     await notifier.queue.join()
     worker.cancel()
     with pytest.raises(asyncio.CancelledError):
         await worker
     assert [path.rsplit("/", 1)[-1] for path, _ in requests] == ["sendMessage", "copyMessage"]
+    assert b'"parse_mode":"HTML"' in requests[0][1]
     assert b'"from_chat_id":-100123' in requests[1][1]
     assert b'"message_id":456' in requests[1][1]
     await notifier.close()

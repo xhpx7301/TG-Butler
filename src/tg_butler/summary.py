@@ -168,7 +168,9 @@ def day_bounds(day: date, timezone: str) -> tuple[datetime, datetime]:
     )
 
 
-def message_link(chat_id: int, message_id: int) -> str:
+def message_link(chat_id: int, message_id: int, username: str | None = None) -> str:
+    if username:
+        return f"https://t.me/{username}/{message_id}"
     if str(chat_id).startswith("-100"):
         return f"https://t.me/c/{str(chat_id)[4:]}/{message_id}"
     return ""

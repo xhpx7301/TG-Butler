@@ -29,18 +29,18 @@ class Notifier:
         self._url = f"{self._base_url}/sendMessage"
         self.chat_id = chat_id
         self.http = httpx.AsyncClient(timeout=30)
-        self.queue: asyncio.Queue[tuple[str, int | None, int | None]] = asyncio.Queue(
+        self.queue: asyncio.Queue[tuple[str, int | None, int | None, str | None]] = asyncio.Queue(
             maxsize=queue_size
         )
         self.lock = asyncio.Lock()
         self.dropped = 0
 
-    async def send(self, text: str) -> None:
+    async def send(self, text: str, parse_mode: str | None = None) -> None:
         async with self.lock:
             for part in chunks(text):
-                await self._send_part(part)
+                await self._send_part(part, parse_mode)
 
-    async def _send_part(self, text: str) -> None:
+    async def _send_part(self, text: str, parse_mode: str | None = None) -> None:
         for attempt in range(3):
             try:
                 response = await self.http.post(
@@ -49,6 +49,7 @@ class Notifier:
                         "chat_id": self.chat_id,
                         "text": text,
                         "link_preview_options": {"is_disabled": True},
+                        **({"parse_mode": parse_mode} if parse_mode else {}),
                     },
                 )
             except httpx.TransportError:
@@ -74,12 +75,14 @@ class Notifier:
         raise RuntimeError("Telegram notification attempts exhausted")
 
     def enqueue(self, text: str) -> None:
-        self._enqueue((text, None, None))
+        self._enqueue((text, None, None, None))
 
-    def enqueue_copy(self, text: str, from_chat_id: int, message_id: int) -> None:
-        self._enqueue((text, from_chat_id, message_id))
+    def enqueue_copy(
+        self, text: str, from_chat_id: int, message_id: int, parse_mode: str | None = None
+    ) -> None:
+        self._enqueue((text, from_chat_id, message_id, parse_mode))
 
-    def _enqueue(self, item: tuple[str, int | None, int | None]) -> None:
+    def _enqueue(self, item: tuple[str, int | None, int | None, str | None]) -> None:
         try:
             self.queue.put_nowait(item)
         except asyncio.QueueFull:
@@ -90,7 +93,7 @@ class Notifier:
 
     async def worker(self) -> None:
         while True:
-            text, from_chat_id, message_id = await self.queue.get()
+            text, from_chat_id, message_id, parse_mode = await self.queue.get()
             try:
                 if self.dropped:
                     count = self.dropped
@@ -98,7 +101,7 @@ class Notifier:
                         f"TG-Butler：通知队列拥堵，{count} 条实时提醒未发送；消息仍在本地数据库。"
                     )
                     self.dropped -= count
-                await self.send(text)
+                await self.send(text, parse_mode)
                 if from_chat_id is not None and message_id is not None:
                     await self._copy_message(from_chat_id, message_id)
             except Exception as exc:

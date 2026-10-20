@@ -7,6 +7,7 @@ import re
 import signal
 from contextlib import suppress
 from datetime import datetime, timedelta
+from html import escape
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -71,6 +72,40 @@ def report_alert_matches(group, text: str, message) -> bool:
     return bool(checks) and any(checks)
 
 
+def live_alert(
+    group,
+    sender,
+    sender_name: str,
+    sender_id: int,
+    text: str,
+    message_date: datetime,
+    message_id: int,
+    timezone: ZoneInfo,
+    chat_username: str | None = None,
+    watched: bool = True,
+) -> str:
+    """Build a readable Telegram HTML alert with a direct link to its source message."""
+    username = getattr(sender, "username", None)
+    identity = f"{sender_id} | @{username}" if username else str(sender_id)
+    stamp = message_date.astimezone(timezone).strftime("%Y/%m/%d %H:%M:%S")
+    link = message_link(group.id, message_id, chat_username)
+    link_line = (
+        f'🔗 消息直达：<a href="{escape(link, quote=True)}">点击直接跳转消息</a>' if link else ""
+    )
+    lines = [
+        "🚨 <b>【监控预警：目标用户已发言】</b>"
+        if watched
+        else "🔔 <b>【监控提醒：群组收到新消息】</b>",
+        f"👤 <b>发言人:</b> {escape(sender_name)}（{escape(identity)}）",
+        f"👥 <b>来源群组:</b> {group.id}（{escape(group.name or str(group.id))}）",
+        f"🕒 <b>发言时间:</b> {stamp}",
+    ]
+    if link_line:
+        lines.append(link_line)
+    lines.append(f"📝 <b>发言内容:</b>\n{escape(text[:6000])}")
+    return "\n".join(lines)
+
+
 async def connect_authorized(client) -> None:
     await client.connect()
     if not await client.is_user_authorized():
@@ -123,23 +158,29 @@ async def run(
             )
             watched = event.sender_id in group.watch_users
             if added and (group.notify_all or watched):
-                stamp = event.message.date.astimezone(zone).strftime("%m-%d %H:%M")
-                monitor_notifier.enqueue(
-                    f"🔔 {group.name or group.id} · {stamp}\n"
-                    f"{sender_name}（{event.sender_id}）\n{text[:6000]}\n"
-                    f"{message_link(event.chat_id, event.id)}"
+                alert = live_alert(
+                    group,
+                    sender,
+                    sender_name,
+                    event.sender_id,
+                    text,
+                    event.message.date,
+                    event.id,
+                    zone,
+                    getattr(event.chat, "username", None),
+                    watched,
                 )
+                monitor_notifier.enqueue(alert, parse_mode="HTML")
                 if (
                     watched
                     and not same_notifier
                     and report_alert_matches(group, text, event.message)
                 ):
                     report_notifier.enqueue_copy(
-                        f"🎯 {group.name or group.id} · {stamp}\n"
-                        f"{sender_name}（{event.sender_id}）\n{text[:6000]}\n"
-                        f"{message_link(event.chat_id, event.id)}",
+                        alert.replace("监控预警：目标用户已发言", "筛选提醒：目标用户消息命中条件"),
                         event.chat_id,
                         event.id,
+                        parse_mode="HTML",
                     )
         except Exception as exc:
             log.error(
