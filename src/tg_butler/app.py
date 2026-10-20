@@ -155,6 +155,7 @@ async def run(
         }
         for account_id in clients
     }
+    dialog_names: dict[str, dict[int, str]] = {}
     menu = None
     menu_task = None
 
@@ -228,6 +229,7 @@ async def run(
         for account_id, client in clients.items():
             await connect_authorized(client)
             dialogs = await client.get_dialogs()
+            dialog_names[account_id] = {dialog.id: dialog.name for dialog in dialogs}
             available = {dialog.id for dialog in dialogs}
             groups = groups_by_account[account_id]
             jobs = [
@@ -268,11 +270,23 @@ async def run(
         for job in settings.checkins:
             if not job.enabled:
                 continue
+            account_name = next(
+                account.name for account in settings.accounts if account.id == job.account_id
+            )
+            chat_name = dialog_names[job.account_id].get(job.chat_id, str(job.chat_id))
             scheduler.add_job(
                 run_checkin,
                 trigger(job.at),
                 id=f"checkin:{job.name}",
-                args=[clients[job.account_id], job, store, monitor_notifier, settings.timezone],
+                args=[
+                    clients[job.account_id],
+                    job,
+                    store,
+                    monitor_notifier,
+                    settings.timezone,
+                    account_name,
+                    chat_name,
+                ],
                 coalesce=True,
                 max_instances=1,
                 misfire_grace_time=60,

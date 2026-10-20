@@ -237,12 +237,26 @@ class FakeNotifier:
 
 async def test_early_confirmation_race_and_daily_dedup(store):
     client, notifier = FakeClient(), FakeNotifier()
-    await run_checkin(client, checkin_job(), store, notifier, "Asia/Shanghai")
+    await run_checkin(
+        client,
+        checkin_job(),
+        store,
+        notifier,
+        "Asia/Shanghai",
+        "工作账号",
+        "测试群",
+    )
     await run_checkin(client, checkin_job(), store, notifier, "Asia/Shanghai")
     assert client.calls == 1
     assert store.runs()[0]["status"] == "confirmed"
     assert client.handler is None
     assert len(notifier.alerts) == 2
+    detail = notifier.alerts[-1]
+    assert "签到成功" in detail
+    assert "任务：job" in detail
+    assert "账号：工作账号" in detail
+    assert "群组：测试群（-1001）" in detail
+    assert "收到回复：成功" in detail
 
 
 async def test_ambiguous_send_is_not_automatically_retried(store):

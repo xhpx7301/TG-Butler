@@ -89,7 +89,8 @@ class TelegramGateway:
                 dialogs = await client.get_dialogs()
                 if job.account_id != account_id:
                     raise ValueError("此签到任务分配给其他 Telegram 账号")
-                if not any(item.id == job.chat_id for item in dialogs):
+                chat = next((item for item in dialogs if item.id == job.chat_id), None)
+                if chat is None:
                     raise ValueError("签到群组不在当前账号的群组列表中")
 
                 class TestNotifier:
@@ -98,7 +99,18 @@ class TelegramGateway:
 
                 store = Store(Path(":memory:"))
                 try:
-                    await run_checkin(client, job, store, TestNotifier(), settings.timezone)
+                    account_name = next(
+                        account.name for account in settings.accounts if account.id == account_id
+                    )
+                    await run_checkin(
+                        client,
+                        job,
+                        store,
+                        TestNotifier(),
+                        settings.timezone,
+                        account_name,
+                        chat.name,
+                    )
                     run = store.runs()[0]
                     labels = {
                         "confirmed": "测试签到已确认成功",

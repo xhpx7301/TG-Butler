@@ -36,6 +36,8 @@ async def run_checkin(
     store: Store,
     notifier: Notifier,
     timezone: str,
+    account_name: str | None = None,
+    chat_name: str | None = None,
 ) -> None:
     day = datetime.now(ZoneInfo(timezone)).date().isoformat()
     if not store.claim("checkin", job.name, day):
@@ -54,7 +56,7 @@ async def run_checkin(
             return
         status = match_response(job, event.message, sent.id)
         if status and not result.done():
-            result.set_result(status)
+            result.set_result((status, event.message.raw_text or "（非文本回复）"))
 
     builder = events.NewMessage(chats=[job.chat_id], incoming=True)
     if job.responder_id:
@@ -69,18 +71,26 @@ async def run_checkin(
         for message in early:
             status = match_response(job, message, sent.id)
             if status and not result.done():
-                result.set_result(status)
+                result.set_result((status, message.raw_text or "（非文本回复）"))
         try:
-            status = await asyncio.wait_for(result, timeout=job.timeout_seconds)
+            status, reply_text = await asyncio.wait_for(result, timeout=job.timeout_seconds)
         except TimeoutError:
             status = "timeout"
+            reply_text = "未收到符合规则的回复"
         store.finish("checkin", job.name, day, status, str(sent.id))
         labels = {
-            "confirmed": "✅ 收到匹配的签到成功回复。",
-            "rejected": "❌ 收到匹配的签到失败回复。",
-            "timeout": "⏳ 命令已发送，但等待回复超时，签到结果尚未确认。",
+            "confirmed": "✅ 签到成功",
+            "rejected": "❌ 签到失败",
+            "timeout": "⏳ 等待超时，结果尚未确认",
         }
-        notifier.enqueue(f"{job.name}：{labels[status]}")
+        notifier.enqueue(
+            f"{labels[status]}\n"
+            f"任务：{job.name}\n"
+            f"账号：{account_name or job.account_id}\n"
+            f"群组：{chat_name or str(job.chat_id)}（{job.chat_id}）\n"
+            f"签到结果：{labels[status]}\n"
+            f"收到回复：{reply_text}"
+        )
     except Exception as exc:
         # A network error can occur after Telegram accepted a command.
         # 'uncertain' deliberately avoids claiming that nothing was sent.
