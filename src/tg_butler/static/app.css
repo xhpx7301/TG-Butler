@@ -288,3 +288,59 @@ main,.page-heading,section,article,.grid>*{min-width:0}
   header h1{font-size:17px}
 }
 @media(prefers-reduced-motion:reduce){#sidebar{transition:none}}
+
+/* Consistent compact form cards: aligned fields, predictable action rows, and responsive controls. */
+section[data-section]:not([data-section="overview"])>article{padding:20px}
+section[data-section]:not([data-section="overview"])>article>h2{margin-bottom:6px}
+section[data-section]:not([data-section="overview"])>article>p.muted{max-width:78ch;line-height:1.55}
+section[data-section]:not([data-section="overview"]) form:not(.inline-form){display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:16px;row-gap:0;align-items:start}
+section[data-section]:not([data-section="overview"]) form:not(.inline-form)>h3,
+section[data-section]:not([data-section="overview"]) form:not(.inline-form)>.grid,
+section[data-section]:not([data-section="overview"]) form:not(.inline-form)>.buttons,
+section[data-section]:not([data-section="overview"]) form:not(.inline-form)>button,
+section[data-section]:not([data-section="overview"]) form:not(.inline-form)>.hint{grid-column:1/-1}
+section[data-section]:not([data-section="overview"]) form:not(.inline-form)>label{min-width:0;margin-bottom:13px}
+section[data-section]:not([data-section="overview"]) input:not([type="checkbox"]),
+section[data-section]:not([data-section="overview"]) select{min-height:42px;padding:8px 11px;border-radius:8px}
+section[data-section]:not([data-section="overview"]) button{min-height:38px;padding:8px 13px;font-size:12px;border-radius:8px}
+section[data-section]:not([data-section="overview"]) form:not(.inline-form)>button{justify-self:start}
+section[data-section]:not([data-section="overview"]) .buttons{justify-content:flex-start;gap:8px;margin-top:2px}
+section[data-section="notification"] .grid>form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:13px;align-items:start}
+section[data-section="notification"] .grid>form>h3,
+section[data-section="notification"] .grid>form>.buttons{grid-column:1/-1}
+section[data-section="notification"] .grid>form>label{min-width:0;overflow-wrap:anywhere}
+section[data-section="telegram"] #application-form>.grid,
+section[data-section="summary"] #summary-form>.grid,
+section[data-section="system"] #system-form>.grid,
+section[data-section="admin"] #admin-form>.grid{grid-column:1/-1}
+section[data-section="admin"] #admin-form>label:first-child{grid-column:1/-1;max-width:560px}
+section[data-section="telegram"] #password-form{max-width:560px}
+section[data-section="groups"]>article:first-child>.buttons.group-list-actions{margin:16px 0}
+section[data-section="groups"] .inline-form{gap:14px;align-items:end}
+section[data-section="groups"] .inline-form button{margin-bottom:14px}
+section[data-section="groups"] .hint{line-height:1.55}
+@media(max-width:800px){
+  section[data-section]:not([data-section="overview"])>article{padding:17px}
+  section[data-section]:not([data-section="overview"]) form:not(.inline-form){column-gap:12px}
+  section[data-section="notification"] .grid>form{column-gap:10px}
+}
+@media(max-width:680px){
+  section[data-section]:not([data-section="overview"])>article{padding:15px}
+  section[data-section]:not([data-section="overview"]) form:not(.inline-form){grid-template-columns:minmax(0,1fr);column-gap:0}
+  section[data-section]:not([data-section="overview"]) form:not(.inline-form)>h3,
+  section[data-section]:not([data-section="overview"]) form:not(.inline-form)>.grid,
+  section[data-section]:not([data-section="overview"]) form:not(.inline-form)>.buttons,
+  section[data-section]:not([data-section="overview"]) form:not(.inline-form)>button,
+  section[data-section]:not([data-section="overview"]) form:not(.inline-form)>.hint{grid-column:1}
+  section[data-section="notification"] .grid>form{grid-template-columns:minmax(0,1fr);column-gap:0}
+  section[data-section="notification"] .grid>form>h3,
+  section[data-section="notification"] .grid>form>.buttons{grid-column:1}
+  section[data-section]:not([data-section="overview"]) input:not([type="checkbox"]),
+  section[data-section]:not([data-section="overview"]) select{min-height:44px;font-size:16px}
+  section[data-section]:not([data-section="overview"]) button{min-height:44px;font-size:13px}
+  section[data-section]:not([data-section="overview"]) .buttons{display:flex;flex-wrap:wrap;align-items:stretch}
+  section[data-section]:not([data-section="overview"]) .buttons button{flex:1 1 145px}
+  section[data-section="telegram"] #password-form{max-width:none}
+  section[data-section="groups"] .inline-form{gap:4px;align-items:stretch}
+  section[data-section="groups"] .inline-form button{margin-bottom:0}
+}
