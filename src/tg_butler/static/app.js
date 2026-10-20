@@ -66,8 +66,8 @@ async function load(){
   renderAccounts();
   setModelOptions([], summary.model||"");
   fill("system-form",{timezone:config.timezone||"Asia/Shanghai",retention_days:config.retention_days||30,queue_size:(config.notifications||{}).queue_size||500});
-  $("group-list").replaceChildren();(config.groups||[]).forEach(addGroup);
-  $("checkin-list").replaceChildren();(config.checkins||[]).forEach(addCheckin);
+  $("group-list").replaceChildren();(config.groups||[]).forEach(group=>addGroup(group));
+  $("checkin-list").replaceChildren();(config.checkins||[]).forEach(job=>addCheckin(job));
   await loadBackups();
   $("runs").replaceChildren();for(const row of state.runs){const tr=document.createElement("tr");for(const value of [row.day,row.kind,row.name,row.status]){const td=document.createElement("td");td.textContent=value;tr.append(td);}$("runs").append(tr);}
 }
