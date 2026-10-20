@@ -65,11 +65,13 @@ def test_invalid_schedule_rejected(value):
         Checkin(name="job", chat_id=1, at=value, command="/go")
 
 
-def test_config_rejects_unknown_keys_and_ambiguous_rules():
+def test_config_rejects_unknown_keys_and_allows_optional_checkin_rules():
     with pytest.raises(ValidationError):
         Settings.model_validate({"groups": [{"id": 1, "watch_user": [2]}]})
-    with pytest.raises(ValidationError):
-        Checkin(name="job", chat_id=1, at="09:00", command="/go", success_pattern="ok")
+    job = Checkin(
+        name="job", chat_id=1, at="09:00", command="/go", success_pattern="ok"
+    )
+    assert job.responder_id is None
 
 
 def test_legacy_tasks_default_to_default_account_and_unknown_account_is_rejected():

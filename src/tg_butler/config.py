@@ -56,8 +56,6 @@ class Checkin(StrictModel):
     @model_validator(mode="after")
     def validate_checkin(self) -> Checkin:
         time_parts(self.at)
-        if bool(self.responder_id) != bool(self.success_pattern):
-            raise ValueError("responder_id and success_pattern must be configured together")
         for pattern in (self.success_pattern, self.failure_pattern):
             if pattern:
                 try:

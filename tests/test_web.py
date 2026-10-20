@@ -171,6 +171,36 @@ def test_saving_config_restarts_only_an_active_task_service(web):
     ]
 
 
+def test_saving_checkin_with_optional_response_fields(web):
+    app, _, _ = web
+    client = app.test_client()
+    headers = authenticate(client)
+    state = client.get("/api/state").json
+    changed = state["config"] | {
+        "checkins": [
+            {
+                "name": "daily",
+                "chat_id": -100123,
+                "at": "09:00",
+                "command": "/checkin",
+                "responder_id": None,
+                "success_pattern": "签到成功|已签到",
+                "failure_pattern": "签到失败",
+            }
+        ]
+    }
+
+    response = client.post(
+        "/api/config", json={"revision": state["revision"], "config": changed}, headers=headers
+    )
+
+    assert response.status_code == 200, response.get_json()
+    saved = client.get("/api/state").json["config"]["checkins"][0]
+    assert saved["responder_id"] is None
+    assert saved["success_pattern"] == "签到成功|已签到"
+    assert saved["failure_pattern"] == "签到失败"
+
+
 def test_admin_password_change_and_bu_reset_revoke_all_sessions(web):
     app, config, _ = web
     first, other = app.test_client(), app.test_client()
