@@ -78,6 +78,7 @@ section[data-section]:not([data-section="overview"]) .grid{gap:0 18px}
 section[data-section]:not([data-section="overview"]) label{margin-bottom:17px}
 section[data-section]:not([data-section="overview"]) .hint{margin-top:13px}
 section[data-section="groups"] .inline-form{margin-top:10px}
+section[data-section="groups"] .group-list-actions{margin-top:12px}
 section[data-section="groups"] #telegram-items{margin-top:18px}
 section[data-section="groups"] #group-list{margin-top:18px}
 section[data-section="checkins"] #checkin-list{margin-top:18px}
