@@ -13,7 +13,13 @@ async function api(path, data) {
 }
 function showLogin(){ setMenuOpen(false,false);$("login").hidden=false;$("dashboard").hidden=true; }
 function fields(form){ return Object.fromEntries(new FormData(form)); }
-function fill(id, data){ const form=$(id); for(const [key,value] of Object.entries(data)){const field=form.elements.namedItem(key);if(!field)continue;if(field.type==="checkbox")field.checked=!!value;else field.value=value??"";} }
+function syncStateToggle(input){const key=input.name||input.dataset.key;const button=input.parentElement.querySelector(`[data-toggle-for="${key}"]`);if(!button)return;const active=input.checked;button.setAttribute("aria-checked",String(active));button.classList.toggle("is-active",active);button.textContent=active?"● 已启用":"○ 已停用";}
+function addStateToggle(input){
+  const button=document.createElement("button");button.type="button";button.className="state-toggle";button.dataset.toggleFor=input.name||input.dataset.key;button.setAttribute("role","switch");button.setAttribute("aria-label",input.closest("label").textContent.replace(/● 已启用|○ 已停用/g,"").trim());
+  input.insertAdjacentElement("afterend",button);input.classList.add("state-input");
+  button.addEventListener("click",()=>{input.checked=!input.checked;syncStateToggle(input);input.dispatchEvent(new Event("change",{bubbles:true}));});syncStateToggle(input);return button;
+}
+function fill(id, data){ const form=$(id); for(const [key,value] of Object.entries(data)){const field=form.elements.namedItem(key);if(!field)continue;if(field.type==="checkbox"){field.checked=!!value;syncStateToggle(field);}else field.value=value??"";} }
 function bindForm(id, handler){ $(id).addEventListener("submit",async event=>{event.preventDefault();const buttons=[...event.target.querySelectorAll("button")];buttons.forEach(b=>b.disabled=true);try{await handler(fields(event.target),event.target);}catch(error){toast(error.message,true);}finally{buttons.forEach(b=>b.disabled=false);}}); }
 function bindButton(id, handler){ $(id).addEventListener("click",async()=>{const button=$(id);button.disabled=true;try{await handler();}catch(error){toast(error.message,true);}finally{button.disabled=false;}}); }
 const mobileNavigation=window.matchMedia("(max-width:680px)");
@@ -64,7 +70,7 @@ async function load(){
   $("runs").replaceChildren();for(const row of state.runs){const tr=document.createElement("tr");for(const value of [row.day,row.kind,row.name,row.status]){const td=document.createElement("td");td.textContent=value;tr.append(td);}$("runs").append(tr);}
 }
 function inputField(container,key,label,value,help,type="text"){
-  const wrapper=document.createElement("label"), input=document.createElement("input"), small=document.createElement("small");wrapper.append(document.createTextNode(label));input.dataset.key=key;input.type=type;if(type==="checkbox"){wrapper.className="check";input.checked=!!value;}else input.value=value??"";wrapper.append(input);small.textContent=help;wrapper.append(small);container.append(wrapper);return input;
+  const wrapper=document.createElement("label"), input=document.createElement("input"), small=document.createElement("small");wrapper.append(document.createTextNode(label));input.dataset.key=key;input.type=type;if(type==="checkbox"){wrapper.className="check";input.checked=!!value;}else input.value=value??"";wrapper.append(input);small.textContent=help;wrapper.append(small);container.append(wrapper);if(type==="checkbox")addStateToggle(input);return input;
 }
 function record(container,title,original){const box=document.createElement("div");box.className="record";box._original=structuredClone(original);const heading=document.createElement("div");heading.className="record-heading";const name=document.createElement("b");name.textContent=title;const remove=document.createElement("button");remove.type="button";remove.className="danger";remove.textContent="删除";remove.onclick=()=>{if(confirm("删除此项？点击保存后生效。"))box.remove();};heading.append(name,remove);const grid=document.createElement("div");grid.className="grid";box.append(heading,grid);$(container).append(box);return grid;}
 function addGroup(group={}){const grid=record("group-list",group.name||"监控群组",group);inputField(grid,"id","群组 ID",group.id,"在 Telegram 账号页读取，保留 -100 等负号。");inputField(grid,"name","备注名称",group.name,"自定义，用于提醒中区分群组。");inputField(grid,"watch_users","关注用户 ID",(group.watch_users||[]).join(","),"数字 ID 用英文或中文逗号分隔，在成员列表查询。留空不指定关注用户。");inputField(grid,"notify_all","全群消息提醒",group.notify_all,"打开后每条收到的新消息都提醒。","checkbox");inputField(grid,"daily_summary","参与每日日报",group.daily_summary!==false,"由关注-日报机器人发送。","checkbox");inputField(grid,"report_keywords","自定义提醒关键词",(group.report_keywords||[]).join(","),"自定义机器人匹配关注用户消息；英文或中文逗号分隔，留空关闭关键词筛选。");inputField(grid,"report_match_mode","关键词匹配方式",group.report_match_mode||"any","any=命中任一关键词，all=必须同时命中。");inputField(grid,"report_images","自定义提醒图片",group.report_images,"关注用户发送图片时通知自定义机器人并附原消息。","checkbox");inputField(grid,"report_links","自定义提醒链接",group.report_links,"关注用户发送链接时通知自定义机器人并附原消息。","checkbox");}
@@ -90,6 +96,7 @@ function setModelOptions(models, selected=""){
 function aiFormValues(){return {api_url:$("summary-form").elements.api_url.value.trim(),model:$("summary-model-manual").value.trim()||$("summary-model-select").value,api_key:$("ai-form").elements.SUMMARY_API_KEY.value.trim()};}
 function showModels(models){const current=$("summary-model-manual").value.trim();setModelOptions(models,current);if(!models.length)toast("接口返回的模型列表为空",true);else toast(`已读取 ${models.length} 个模型，请在下拉框中选择`);}
 async function saveConfig(change){const config=structuredClone(state.config);change(config);const result=await api("config",{config,revision:state.revision});await load();toast(result.message);}
+for(const input of document.querySelectorAll('#summary-form input[type="checkbox"]'))addStateToggle(input);
 for(const button of document.querySelectorAll("[data-page]"))button.onclick=()=>navigate(button.dataset.page);
 bindForm("login-form",async(data,form)=>{const result=await api("login",data);csrf=result.csrf;$("logged-user").textContent=result.username;fill("admin-form",{username:result.username});form.reset();await load();});
 bindButton("logout",async()=>{await api("logout",{});location.reload();});
