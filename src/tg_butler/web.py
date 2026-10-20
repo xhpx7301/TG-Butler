@@ -259,6 +259,7 @@ def create_app(config: Path, *, control=system_control) -> Flask:
             if not configured[f"TG_{role}_BOT_TOKEN"]:
                 configured[f"TG_{role}_BOT_TOKEN"] = configured["TG_BOT_TOKEN"]
         settings = load_settings(config)
+        data.setdefault("accounts", [account.model_dump() for account in settings.accounts])
         store = Store(settings.data_dir / "butler.sqlite3")
         try:
             runs = store.runs()
@@ -266,6 +267,17 @@ def create_app(config: Path, *, control=system_control) -> Flask:
             store.close()
         return jsonify(
             config=data,
+            accounts=[
+                {
+                    "id": account.id,
+                    "authorized": (
+                        settings.data_dir / "user.session"
+                        if account.id == "default"
+                        else settings.data_dir / "accounts" / f"{account.id}.session"
+                    ).is_file(),
+                }
+                for account in settings.accounts
+            ],
             revision=version,
             credentials=visible,
             configured=configured,

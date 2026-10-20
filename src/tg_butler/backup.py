@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import sqlite3
 import tarfile
@@ -57,13 +58,25 @@ def create_backup(root: Path, config: Path, *, now: datetime | None = None) -> P
     with tempfile.TemporaryDirectory(dir=folder) as temp_name:
         temp = Path(temp_name)
         files: list[tuple[Path, str]] = []
-        for source, archive_name in (
+        sources = [
             (config, "config.yaml"),
             (root / ".env", ".env"),
             (data_dir / "butler.sqlite3", "runtime/butler.sqlite3"),
             (data_dir / "user.session", "runtime/user.session"),
             (root / "data" / "backup-settings.json", "runtime/backup-settings.json"),
-        ):
+        ]
+        account_config = Settings.model_validate(
+            yaml.safe_load(config.read_text(encoding="utf-8")) or {}
+        )
+        sources.extend(
+            (
+                data_dir / "accounts" / f"{account.id}.session",
+                f"runtime/accounts/{account.id}.session",
+            )
+            for account in account_config.accounts
+            if account.id != "default"
+        )
+        for source, archive_name in sources:
             if not source.is_file():
                 if archive_name == ".env":
                     empty_env = temp / ".env"
@@ -136,7 +149,12 @@ def _read_archive(upload: Path) -> dict[str, bytes]:
                 if member.name == "manifest.json":
                     if member.size > 4096:
                         raise ValueError("备份清单无效")
-                elif member.name not in ALLOWED_FILES:
+                elif member.name not in ALLOWED_FILES and not (
+                    len(path.parts) == 3
+                    and path.parts[0] == "runtime"
+                    and path.parts[1] == "accounts"
+                    and re.fullmatch(r"[a-z][a-z0-9_-]{0,31}\.session", path.parts[2])
+                ):
                     raise ValueError("备份包包含未知文件，已拒绝导入")
                 if member.name in result:
                     raise ValueError("备份包内存在重复文件")
@@ -193,7 +211,7 @@ def restore_backup(root: Path, config: Path, upload: Path) -> None:
             destination = staging / Path(name).name
             destination.write_bytes(content)
             os.chmod(destination, 0o600)
-            if name in {"runtime/butler.sqlite3", "runtime/user.session"}:
+            if name.endswith((".sqlite3", ".session")):
                 with closing(sqlite3.connect(f"file:{destination}?mode=ro", uri=True)) as db:
                     db.execute("PRAGMA schema_version").fetchone()
             staged[name] = destination
@@ -207,7 +225,9 @@ def restore_backup(root: Path, config: Path, upload: Path) -> None:
                     if name == ".env"
                     else root / "data" / "backup-settings.json"
                     if name == "runtime/backup-settings.json"
-                    else current_data_dir / Path(name).name
+                    else current_data_dir
+                    / Path(name.removeprefix("runtime/")).parent
+                    / Path(name).name
                 )
             )
             target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)

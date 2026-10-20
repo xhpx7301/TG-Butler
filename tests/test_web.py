@@ -110,6 +110,7 @@ def test_secret_values_not_returned_to_browser(web):
     for secret in ("private-hash", "private-token", "private-key"):
         assert secret not in body
     assert response.json["configured"]["TG_API_HASH"] is True
+    assert response.json["accounts"] == [{"id": "default", "authorized": False}]
 
 
 def test_stale_config_and_invalid_input_never_overwrite(web):

@@ -29,11 +29,14 @@ class TelegramGateway:
 
     async def request(self, action: str, data: dict, owner: str) -> dict:
         settings = load_settings(self.config)
+        account_id = str(data.get("account_id", "default"))
+        if account_id not in {account.id for account in settings.accounts}:
+            raise ValueError("未找到所选 Telegram 账号")
         values = dotenv_values(self.config.parent / ".env")
         credentials = ApplicationCredentials(
             api_id=values.get("TG_API_ID", ""), api_hash=values.get("TG_API_HASH", "")
         )
-        client = make_client(settings, credentials)
+        client = make_client(settings, credentials, account_id)
         try:
             await client.connect()
             if action == "send-code":
@@ -48,6 +51,7 @@ class TelegramGateway:
                     "hash": sent.phone_code_hash,
                     "expires": time.monotonic() + 300,
                     "owner": owner,
+                    "account_id": account_id,
                 }
                 return {
                     "status": "code",
@@ -55,7 +59,11 @@ class TelegramGateway:
                 }
             if action in {"verify-code", "password"}:
                 pending = self.pending
-                if pending.get("owner") != owner or pending.get("expires", 0) < time.monotonic():
+                if (
+                    pending.get("owner") != owner
+                    or pending.get("account_id") != account_id
+                    or pending.get("expires", 0) < time.monotonic()
+                ):
                     raise ValueError("验证流程已过期，请重新获取验证码")
                 try:
                     if action == "password":
@@ -79,6 +87,8 @@ class TelegramGateway:
                 if job is None:
                     raise ValueError("未找到已保存的签到任务，请先保存签到设置")
                 dialogs = await client.get_dialogs()
+                if job.account_id != account_id:
+                    raise ValueError("此签到任务分配给其他 Telegram 账号")
                 if not any(item.id == job.chat_id for item in dialogs):
                     raise ValueError("签到群组不在当前账号的群组列表中")
 

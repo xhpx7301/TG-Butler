@@ -45,11 +45,14 @@ async def execute(args) -> None:
         return
     if args.command in {"login", "dialogs", "members"}:
         credentials = load_application_credentials(args.config)
-        client = make_client(settings, credentials)
+        account_id = getattr(args, "account", "default")
+        if account_id not in {account.id for account in settings.accounts}:
+            raise RuntimeError(f"Unknown Telegram account: {account_id}")
+        client = make_client(settings, credentials, account_id)
         try:
             if args.command == "login":
                 await client.start()
-                print("登录成功。会话已保存到 data_dir；请勿将会话文件提交到 Git。")
+                print(f"登录成功。账号 {account_id} 的会话已保存；请勿将会话文件提交到 Git。")
             else:
                 await connect_authorized(client)
                 dialogs = await client.get_dialogs()
@@ -100,10 +103,13 @@ def main() -> None:
     parser.add_argument("--config", type=Path, default=Path("config.yaml"))
     commands = parser.add_subparsers(dest="command", required=True)
     for name in ("login", "dialogs", "check-config", "run", "notify-test", "status"):
-        commands.add_parser(name)
+        command = commands.add_parser(name)
+        if name in {"login", "dialogs"}:
+            command.add_argument("--account", default="default")
     members = commands.add_parser("members", help="列出群成员 ID（取决于群权限）")
     members.add_argument("chat_id", type=int)
     members.add_argument("--limit", type=int, default=100)
+    members.add_argument("--account", default="default")
     summary = commands.add_parser("summary", help="发送指定日期摘要；每群每天只尝试一次")
     summary.add_argument("--date", type=date.fromisoformat)
     args = parser.parse_args()

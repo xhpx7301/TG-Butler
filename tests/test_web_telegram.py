@@ -52,6 +52,21 @@ async def test_login_challenge_expiry_and_owner_are_checked(gateway):
     client.sign_in.assert_not_awaited()
 
 
+async def test_login_challenge_is_bound_to_selected_account(gateway):
+    manager, client, _ = gateway
+    from tg_butler.menu import save_settings
+
+    save_settings(
+        manager.config, {"accounts": [{"id": "default"}, {"id": "work", "name": "工作"}]}
+    )
+    await manager.request(
+        "send-code", {"phone": "+8613800000000", "account_id": "default"}, "owner"
+    )
+    with pytest.raises(ValueError, match="过期"):
+        await manager.request("verify-code", {"code": "12345", "account_id": "work"}, "owner")
+    client.sign_in.assert_not_awaited()
+
+
 def test_telegram_errors_restore_original_running_state(gateway):
     manager, client, control = gateway
     client.send_code_request.side_effect = OSError("network")

@@ -80,3 +80,21 @@ def test_restore_keeps_current_data_directory_and_rejects_path_traversal(tmp_pat
         bundle.add(source, arcname="../.env")
     with pytest.raises(ValueError, match="路径"):
         validate_backup(bad)
+
+
+def test_backup_restores_named_account_sessions(tmp_path):
+    root = tmp_path / "install"
+    root.mkdir()
+    config = setup_install(root)
+    save_settings(config, {"data_dir": "data", "accounts": [{"id": "default"}, {"id": "work"}]})
+    account_session = root / "data" / "accounts" / "work.session"
+    account_session.parent.mkdir()
+    with closing(sqlite3.connect(account_session)) as db:
+        db.execute("CREATE TABLE sessions (value TEXT)")
+        db.execute("INSERT INTO sessions VALUES ('work-session')")
+        db.commit()
+    archive = create_backup(root, config)
+    account_session.unlink()
+    restore_backup(root, config, archive)
+    with closing(sqlite3.connect(account_session)) as db:
+        assert db.execute("SELECT value FROM sessions").fetchone()[0] == "work-session"

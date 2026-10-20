@@ -23,6 +23,7 @@ def time_parts(value: str) -> tuple[int, int]:
 
 class Group(StrictModel):
     id: int
+    account_id: str = "default"
     name: str = ""
     daily_summary: bool = True
     notify_all: bool = False
@@ -42,6 +43,7 @@ class Group(StrictModel):
 
 class Checkin(StrictModel):
     name: str = Field(min_length=1)
+    account_id: str = "default"
     chat_id: int
     at: str
     command: str = Field(min_length=1, max_length=4096)
@@ -87,6 +89,11 @@ class Notifications(StrictModel):
     queue_size: int = Field(default=500, ge=1, le=10000)
 
 
+class TelegramAccount(StrictModel):
+    id: str = Field(default="default", pattern=r"^[a-z][a-z0-9_-]{0,31}$")
+    name: str = Field(default="默认账号", min_length=1, max_length=64)
+
+
 class Settings(StrictModel):
     timezone: str = "Asia/Shanghai"
     data_dir: Path = Path("data")
@@ -95,6 +102,7 @@ class Settings(StrictModel):
     summary: Summary = Field(default_factory=Summary)
     groups: list[Group] = Field(default_factory=list)
     checkins: list[Checkin] = Field(default_factory=list)
+    accounts: list[TelegramAccount] = Field(default_factory=lambda: [TelegramAccount()])
 
     @model_validator(mode="after")
     def validate_settings(self) -> Settings:
@@ -103,6 +111,15 @@ class Settings(StrictModel):
             raise ValueError("Group IDs must be unique")
         if len({job.name for job in self.checkins}) != len(self.checkins):
             raise ValueError("Check-in names must be unique")
+        if not self.accounts or "default" not in {account.id for account in self.accounts}:
+            raise ValueError("Telegram accounts must include the default account")
+        account_ids = {account.id for account in self.accounts}
+        if len(account_ids) != len(self.accounts):
+            raise ValueError("Telegram account IDs must be unique")
+        if any(group.account_id not in account_ids for group in self.groups):
+            raise ValueError("Every group must reference a configured Telegram account")
+        if any(job.account_id not in account_ids for job in self.checkins):
+            raise ValueError("Every check-in must reference a configured Telegram account")
         return self
 
 

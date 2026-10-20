@@ -9,7 +9,7 @@ import httpx
 import pytest
 from pydantic import ValidationError
 
-from tg_butler.app import live_alert, report_alert_matches
+from tg_butler.app import live_alert, make_client, report_alert_matches
 from tg_butler.checkin import match_response, run_checkin
 from tg_butler.config import Checkin, Credentials, Group, Settings, load_settings
 from tg_butler.notify import Notifier, chunks
@@ -70,6 +70,31 @@ def test_config_rejects_unknown_keys_and_ambiguous_rules():
         Settings.model_validate({"groups": [{"id": 1, "watch_user": [2]}]})
     with pytest.raises(ValidationError):
         Checkin(name="job", chat_id=1, at="09:00", command="/go", success_pattern="ok")
+
+
+def test_legacy_tasks_default_to_default_account_and_unknown_account_is_rejected():
+    settings = Settings.model_validate(
+        {
+            "groups": [{"id": 1}],
+            "checkins": [
+                {"name": "job", "chat_id": 1, "at": "09:00", "command": "/go"}
+            ],
+        }
+    )
+    assert settings.groups[0].account_id == "default"
+    assert settings.checkins[0].account_id == "default"
+    with pytest.raises(ValidationError):
+        Settings.model_validate({"groups": [{"id": 1, "account_id": "missing"}]})
+
+
+def test_accounts_use_separate_telethon_session_paths(tmp_path):
+    from tg_butler.config import ApplicationCredentials
+
+    settings = Settings(data_dir=tmp_path)
+    default = make_client(settings, ApplicationCredentials(api_id=1, api_hash="hash"))
+    extra = make_client(settings, ApplicationCredentials(api_id=1, api_hash="hash"), "work")
+    assert Path(default.session.filename).name == "user.session"
+    assert Path(extra.session.filename).parts[-2:] == ("accounts", "work.session")
 
 
 def test_report_filters_match_keywords_links_and_images():

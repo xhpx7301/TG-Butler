@@ -33,10 +33,18 @@ log = logging.getLogger(__name__)
 LINK_RE = re.compile(r"(?:https?://|www\.|t\.me/)", re.IGNORECASE)
 
 
-def make_client(settings: Settings, credentials: ApplicationCredentials) -> TelegramClient:
+def make_client(
+    settings: Settings, credentials: ApplicationCredentials, account_id: str = "default"
+) -> TelegramClient:
     settings.data_dir.mkdir(parents=True, exist_ok=True)
+    session = (
+        settings.data_dir / "user"
+        if account_id == "default"
+        else settings.data_dir / "accounts" / account_id
+    )
+    session.parent.mkdir(parents=True, exist_ok=True)
     return TelegramClient(
-        str(settings.data_dir / "user"),
+        str(session),
         credentials.api_id,
         credentials.api_hash.get_secret_value(),
         flood_sleep_threshold=0,
@@ -128,10 +136,21 @@ async def run(
         monitor_notifier if same_notifier else make_notifier(settings, report_credentials)
     )
     notifiers = [monitor_notifier] if same_notifier else [monitor_notifier, report_notifier]
-    client = make_client(settings, credentials)
+    active_account_ids = {group.account_id for group in settings.groups} | {
+        job.account_id for job in settings.checkins
+    }
+    active_account_ids.add("default")
+    clients = {
+        account.id: make_client(settings, credentials, account.id)
+        for account in settings.accounts
+        if account.id in active_account_ids
+    }
     scheduler = AsyncIOScheduler(timezone=settings.timezone)
     zone = ZoneInfo(settings.timezone)
-    groups = {group.id: group for group in settings.groups}
+    groups_by_account = {
+        account_id: {group.id: group for group in settings.groups if group.account_id == account_id}
+        for account_id in clients
+    }
     menu = None
     menu_task = None
 
@@ -140,10 +159,7 @@ async def run(
         await asyncio.sleep(1)
         os.kill(os.getpid(), signal.SIGTERM)
 
-    async def on_message(event):
-        group = groups.get(event.chat_id)
-        if group is None:
-            return
+    async def on_message(event, group):
         try:
             sender = await event.get_sender()
             sender_name = get_display_name(sender) if sender else str(event.sender_id)
@@ -205,18 +221,25 @@ async def run(
         return CronTrigger(hour=hour, minute=minute, timezone=settings.timezone)
 
     try:
-        await connect_authorized(client)
-        # Populate Telethon's entity cache so numeric private group IDs resolve.
-        dialogs = await client.get_dialogs()
-        available = {dialog.id for dialog in dialogs}
-        required = set(groups) | {job.chat_id for job in settings.checkins}
-        missing = required - available
-        if missing:
-            raise RuntimeError(f"Configured chats are not in account dialogs: {sorted(missing)}")
-        if groups:
-            client.add_event_handler(
-                on_message, events.NewMessage(chats=list(groups), incoming=True)
-            )
+        for account_id, client in clients.items():
+            await connect_authorized(client)
+            dialogs = await client.get_dialogs()
+            available = {dialog.id for dialog in dialogs}
+            groups = groups_by_account[account_id]
+            jobs = [job for job in settings.checkins if job.account_id == account_id]
+            required = set(groups) | {job.chat_id for job in jobs}
+            missing = required - available
+            if missing:
+                raise RuntimeError(
+                    f"Configured chats are not in account {account_id} dialogs: {sorted(missing)}"
+                )
+            for group in groups.values():
+                async def handle(event, selected_group=group):
+                    await on_message(event, selected_group)
+
+                client.add_event_handler(
+                    handle, events.NewMessage(chats=[group.id], incoming=True)
+                )
         workers = [asyncio.create_task(item.worker()) for item in notifiers]
         menu = TelegramMenu(
             monitor_credentials.bot_token.get_secret_value(),
@@ -239,7 +262,7 @@ async def run(
                 run_checkin,
                 trigger(job.at),
                 id=f"checkin:{job.name}",
-                args=[client, job, store, monitor_notifier, settings.timezone],
+                args=[clients[job.account_id], job, store, monitor_notifier, settings.timezone],
                 coalesce=True,
                 max_instances=1,
                 misfire_grace_time=60,
@@ -251,11 +274,11 @@ async def run(
         scheduler.start()
         log.info(
             "TG-Butler started: %d groups, %d check-ins, timezone=%s",
-            len(groups),
+            len(settings.groups),
             len(settings.checkins),
             settings.timezone,
         )
-        await client.run_until_disconnected()
+        await asyncio.gather(*(client.run_until_disconnected() for client in clients.values()))
     finally:
         if menu is not None:
             await menu.close()
@@ -267,7 +290,8 @@ async def run(
             scheduler.shutdown(wait=False)
             # APScheduler schedules its shutdown on the event loop.
             await asyncio.sleep(0)
-        await client.disconnect()
+        for client in clients.values():
+            await client.disconnect()
         for item in notifiers:
             with suppress(TimeoutError):
                 await asyncio.wait_for(item.queue.join(), timeout=10)

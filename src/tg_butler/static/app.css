@@ -230,6 +230,7 @@ footer{margin-top:22px}
   .login-form-panel form{margin-top:21px}
   #toast{right:12px;bottom:calc(12px + env(safe-area-inset-bottom));left:12px;max-width:none;padding:13px 15px;font-size:13px}
 }
+.account-list{display:grid;gap:8px}.account-row{display:grid;grid-template-columns:minmax(120px,1fr) auto minmax(100px,auto) auto;align-items:center;gap:12px;padding:10px 12px;border:1px solid var(--line);border-radius:6px}.account-row code{color:var(--muted)}
 @media(max-width:380px){
   main{padding-right:11px;padding-left:11px}
   .overview-stats{gap:6px}
