@@ -11,12 +11,41 @@ async function api(path, data) {
   if(!response.ok){ if(response.status===401 && path!=="login") showLogin(); throw Error(result.error||"请求失败"); }
   return result;
 }
-function showLogin(){ $("login").hidden=false;$("dashboard").hidden=true; }
+function showLogin(){ setMenuOpen(false,false);$("login").hidden=false;$("dashboard").hidden=true; }
 function fields(form){ return Object.fromEntries(new FormData(form)); }
 function fill(id, data){ const form=$(id); for(const [key,value] of Object.entries(data)){const field=form.elements.namedItem(key);if(!field)continue;if(field.type==="checkbox")field.checked=!!value;else field.value=value??"";} }
 function bindForm(id, handler){ $(id).addEventListener("submit",async event=>{event.preventDefault();const buttons=[...event.target.querySelectorAll("button")];buttons.forEach(b=>b.disabled=true);try{await handler(fields(event.target),event.target);}catch(error){toast(error.message,true);}finally{buttons.forEach(b=>b.disabled=false);}}); }
 function bindButton(id, handler){ $(id).addEventListener("click",async()=>{const button=$(id);button.disabled=true;try{await handler();}catch(error){toast(error.message,true);}finally{button.disabled=false;}}); }
-function navigate(page){document.querySelectorAll("[data-section]").forEach(s=>s.hidden=s.dataset.section!==page);document.querySelectorAll("[data-page]").forEach(b=>b.classList.toggle("selected",b.dataset.page===page));$("page-title").textContent=titles[page];$("page-summary").textContent=pageSummaries[page]||"";$("global-notice").hidden=page!=="overview";}
+const mobileNavigation=window.matchMedia("(max-width:680px)");
+function setMenuOpen(open,restoreFocus=true){
+  const sidebar=$("sidebar"),mobile=mobileNavigation.matches;
+  open=mobile && open;
+  const wasOpen=document.body.classList.contains("menu-open");
+  document.body.classList.toggle("menu-open",open);
+  $("menu-toggle").setAttribute("aria-expanded",String(open));
+  $("nav-backdrop").hidden=!open;
+  $("main-content").inert=open;
+  sidebar.inert=mobile && !open;
+  if(mobile)sidebar.setAttribute("aria-hidden",String(!open));else sidebar.removeAttribute("aria-hidden");
+  if(open){sidebar.setAttribute("role","dialog");sidebar.setAttribute("aria-modal","true");$("menu-close").focus();}
+  else{sidebar.removeAttribute("role");sidebar.removeAttribute("aria-modal");if(wasOpen && restoreFocus && mobile)$("menu-toggle").focus();}
+}
+$("menu-toggle").onclick=()=>setMenuOpen(true);
+$("menu-close").onclick=()=>setMenuOpen(false);
+$("nav-backdrop").onclick=()=>setMenuOpen(false);
+mobileNavigation.addEventListener("change",()=>setMenuOpen(false,false));
+document.addEventListener("keydown",event=>{
+  if(!document.body.classList.contains("menu-open"))return;
+  if(event.key==="Escape"){event.preventDefault();setMenuOpen(false);}
+  if(event.key==="Tab"){
+    const controls=[...$("sidebar").querySelectorAll("a[href],button:not(:disabled)")].filter(el=>el.getClientRects().length);
+    const first=controls[0],last=controls[controls.length-1];
+    if(event.shiftKey && document.activeElement===first){event.preventDefault();last.focus();}
+    else if(!event.shiftKey && document.activeElement===last){event.preventDefault();first.focus();}
+  }
+});
+setMenuOpen(false,false);
+function navigate(page){document.querySelectorAll("[data-section]").forEach(s=>s.hidden=s.dataset.section!==page);document.querySelectorAll("[data-page]").forEach(b=>{b.classList.toggle("selected",b.dataset.page===page);if(b.closest("nav")){if(b.dataset.page===page)b.setAttribute("aria-current","page");else b.removeAttribute("aria-current");}});$("page-title").textContent=titles[page];$("page-summary").textContent=pageSummaries[page]||"";$("global-notice").hidden=page!=="overview";setMenuOpen(false);if(mobileNavigation.matches)window.scrollTo({top:0,behavior:"instant"});}
 async function load(){
   state=await api("state"); $("login").hidden=true;$("dashboard").hidden=false;
   const config=state.config, summary=config.summary||{};
