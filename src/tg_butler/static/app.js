@@ -1,8 +1,8 @@
 "use strict";
 let csrf = "", state = null;
 const $ = id => document.getElementById(id);
-const titles = {overview:"运行概览",telegram:"Telegram 账号",lookup:"查找群组与用户 ID",notification:"通知机器人",groups:"群组与关注用户",summary:"日报与 AI",checkins:"定时签到",system:"运行设置",backups:"备份与恢复",admin:"管理员账户"};
-const pageSummaries = {overview:"每分钟查看监控、通知、日报和最近执行记录。",telegram:"连接个人 Telegram 账号，读取群组消息并执行任务。",lookup:"查询群组、用户和成员 ID，使用指定账号访问 Telegram。",notification:"管理提醒机器人和接收通知的目标。",groups:"选择监控范围并设置关注用户。",summary:"配置每日摘要、模型服务和测试发送。",checkins:"设置每日命令、回复规则和签到时间。",system:"调整时区、消息留存和通知队列。",backups:"导出配置和运行数据，管理自动备份与恢复。",admin:"管理网页后台的登录账号与安全会话。"};
+const titles = {overview:"运行概览",telegram:"Telegram 账号",lookup:"查找群组与用户 ID",groups:"群组与关注用户",summary:"日报与 AI",checkins:"定时签到",settings:"设置"};
+const pageSummaries = {overview:"每分钟查看监控、通知、日报和最近执行记录。",telegram:"连接个人 Telegram 账号，读取群组消息并执行任务。",lookup:"查询群组、用户和成员 ID，使用指定账号访问 Telegram。",groups:"选择监控范围并设置关注用户。",summary:"配置每日摘要、模型服务和测试发送。",checkins:"设置每日命令、回复规则和签到时间。",settings:"集中管理运行参数、管理员、通知机器人与备份。"};
 let toastTimer;
 function toast(message, error=false) { $("toast").textContent=message; $("toast").className=error?"error":""; $("toast").hidden=false; clearTimeout(toastTimer); toastTimer=setTimeout(()=>$("toast").hidden=true,9000); }
 async function api(path, data) {

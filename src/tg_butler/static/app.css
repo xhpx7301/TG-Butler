@@ -64,8 +64,7 @@ header{margin-bottom:18px}
 nav button{display:flex;align-items:center;gap:10px}
 nav button:before{display:inline-grid;place-items:center;width:18px;color:#9aa7b8;font-size:15px;line-height:1}
 nav button.selected:before{color:currentColor}
-nav button[data-page="overview"]:before{content:"⌂"}nav button[data-page="telegram"]:before{content:"◉"}nav button[data-page="lookup"]:before{content:"⌕"}nav button[data-page="notification"]:before{content:"♢"}nav button[data-page="groups"]:before{content:"⌘"}nav button[data-page="summary"]:before{content:"▤"}nav button[data-page="checkins"]:before{content:"↯"}nav button[data-page="system"]:before{content:"⚙"}nav button[data-page="admin"]:before{content:"◎"}
-nav button[data-page="backups"]:before{content:"⇧"}
+nav button[data-page="overview"]:before{content:"⌂"}nav button[data-page="telegram"]:before{content:"◉"}nav button[data-page="lookup"]:before{content:"⌕"}nav button[data-page="groups"]:before{content:"⌘"}nav button[data-page="summary"]:before{content:"▤"}nav button[data-page="checkins"]:before{content:"↯"}nav button[data-page="settings"]:before{content:"⚙"}
 .backup-operations{background:#f7faff;border-left:3px solid var(--accent)}
 .backup-schedule{background:#fffaf1;border-left:3px solid var(--amber)}
 .backup-schedule form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 16px;align-items:end}
@@ -87,15 +86,12 @@ section[data-section]:not([data-section="overview"])>article>form>button{margin-
 section[data-section="telegram"]>article:first-child{border-top:3px solid var(--accent)}
 section[data-section="telegram"]>article:nth-child(2){border-top:3px solid var(--teal)}
 section[data-section="telegram"]>article:nth-child(3){border-top:3px solid var(--amber)}
-section[data-section="notification"]>article{grid-column:1/-1;border-top:3px solid var(--violet)}
 section[data-section="lookup"]>article{grid-column:1/-1;border-top:3px solid var(--teal)}
 section[data-section="groups"]>article:first-child{border-top:3px solid var(--accent)}
 section[data-section="groups"]>article:nth-child(2){grid-column:1/-1;border-top:3px solid var(--teal)}
 section[data-section="summary"]>article:first-child{grid-column:1/-1;border-top:3px solid var(--violet)}
 section[data-section="summary"]>article:nth-child(2){border-top:3px solid var(--amber)}
 section[data-section="checkins"]>article{grid-column:1/-1;border-top:3px solid var(--teal)}
-section[data-section="system"]>article{grid-column:1/-1;border-top:3px solid var(--accent)}
-section[data-section="admin"]>article{grid-column:1/-1;border-top:3px solid var(--violet)}
 section[data-section]:not([data-section="overview"]) .grid{gap:0 18px}
 .identity-check{display:flex;align-items:center;gap:10px;min-width:0;margin-top:-10px;margin-bottom:14px}.identity-check small{margin:0;overflow-wrap:anywhere}
 section[data-section]:not([data-section="overview"]) label{margin-bottom:17px}
@@ -107,13 +103,8 @@ section[data-section="groups"] #group-list{margin-top:18px}
 section[data-section="checkins"] #checkin-list{margin-top:18px}
 .record{background:#fbfcfe;border-color:#e6ebf2;padding:16px;margin-bottom:12px}
 .record-heading{margin-bottom:12px}.record-heading b{font-size:13px;color:#41516a}
-section[data-section="notification"] h3{font-size:14px;margin:0 0 14px;color:#41516a}
-section[data-section="notification"] .grid>form{padding:16px;border:1px solid var(--line);border-radius:9px;background:#fbfcfe}
-section[data-section="notification"] .grid>form label:last-of-type{margin-bottom:4px}
 section[data-section="summary"] .field-action{margin-top:5px}
 section[data-section="summary"] .field-action+input{margin-top:8px}
-section[data-section="system"] .grid,section[data-section="admin"] .grid{max-width:900px}
-section[data-section="admin"] #admin-form>label{max-width:440px}
 .table-scroll{border:1px solid var(--line);border-radius:8px}
 section[data-section="overview"]+.page-divider{display:none}
 .login-shell{background:#f4f6f9;padding:28px}
@@ -126,7 +117,7 @@ section[data-section="overview"]+.page-divider{display:none}
 .login-copy li{display:flex;align-items:center;gap:9px}.login-copy li:before{content:"✓";display:grid;place-items:center;width:20px;height:20px;border-radius:50%;background:#dcecff;color:var(--accent);font-weight:700}
 .login-form-panel{padding:52px 48px;background:#fff}.login-form-panel h2{font-size:22px;margin:0 0 4px}.login-form-panel>.muted{font-size:13px}.login-form-panel form{margin-top:26px}
 .login-form-panel .hint{font-size:11px;line-height:1.65}
-@media(max-width:800px){section[data-section]:not([data-section="overview"]){grid-template-columns:1fr}section[data-section]:not([data-section="overview"])>article,section[data-section="telegram"]>article:nth-child(3),section[data-section="groups"]>article:nth-child(2),section[data-section="summary"]>article:first-child,section[data-section="checkins"]>article,section[data-section="system"]>article,section[data-section="admin"]>article{grid-column:auto}.login-card{grid-template-columns:1fr}.login-copy{padding:32px 28px;border-right:0;border-bottom:1px solid #dce8fa}.login-form-panel{padding:32px 28px}}
+@media(max-width:800px){section[data-section]:not([data-section="overview"]){grid-template-columns:1fr}section[data-section]:not([data-section="overview"])>article,section[data-section="telegram"]>article:nth-child(3),section[data-section="groups"]>article:nth-child(2),section[data-section="summary"]>article:first-child,section[data-section="checkins"]>article{grid-column:auto}.login-card{grid-template-columns:1fr}.login-copy{padding:32px 28px;border-right:0;border-bottom:1px solid #dce8fa}.login-form-panel{padding:32px 28px}}
 
 /* Compact console pass: reduce repeated chrome and keep more work visible. */
 aside{width:206px;padding:22px 11px}
@@ -151,7 +142,6 @@ button{padding:8px 14px;font-size:13px}.buttons,.header-actions{gap:7px}
 .quick-links{gap:6px}.quick-links button{padding:8px 9px}.quick-links b{font-size:11px}.quick-links small{font-size:9px}
 .activity-panel{margin-bottom:12px!important}.activity-panel th,.activity-panel td{padding:7px 8px}
 section[data-section="lookup"]>article:first-child,section[data-section="groups"]>article:first-child,section[data-section="summary"]>article:nth-child(2){grid-column:1/-1}
-section[data-section="notification"] .grid>form{padding:12px}section[data-section="notification"] h3{margin-bottom:10px}
 .record{padding:12px;margin-bottom:8px}.record-heading{margin-bottom:9px}
 footer{margin-top:22px}
 @media(max-width:680px){aside{width:auto;padding:13px 14px}.brand{padding:0}.nav-label{display:none}nav{display:flex;flex-direction:row;overflow:auto;margin-top:16px;gap:4px}.nav-group{display:flex;gap:4px}.nav-group+.nav-group{border:0;padding:0}.nav-group button{white-space:nowrap;padding:7px 10px}.aside-bottom{margin-top:7px;padding:0}.main{margin:0}main{padding:17px 13px}.notice{font-size:9px}.metric-card{min-height:92px;padding:11px 10px}.metric-card strong{font-size:20px}.overview-columns article,.activity-panel{padding:14px}.setup-panel{display:none}}
@@ -321,15 +311,11 @@ section[data-section]:not([data-section="overview"]) select{min-height:42px;padd
 section[data-section]:not([data-section="overview"]) button{min-height:38px;padding:8px 13px;font-size:12px;border-radius:8px}
 section[data-section]:not([data-section="overview"]) form:not(.inline-form)>button{justify-self:start}
 section[data-section]:not([data-section="overview"]) .buttons{justify-content:flex-start;gap:8px;margin-top:2px}
-section[data-section="notification"] .grid>form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:13px;align-items:start}
-section[data-section="notification"] .grid>form>h3,
-section[data-section="notification"] .grid>form>.buttons{grid-column:1/-1}
-section[data-section="notification"] .grid>form>label{min-width:0;overflow-wrap:anywhere}
 section[data-section="telegram"] #application-form>.grid,
 section[data-section="summary"] #summary-form>.grid,
-section[data-section="system"] #system-form>.grid,
-section[data-section="admin"] #admin-form>.grid{grid-column:1/-1}
-section[data-section="admin"] #admin-form>label:first-child{grid-column:1/-1;max-width:560px}
+section[data-section="settings"] #system-form>.grid,
+section[data-section="settings"] #admin-form>.grid{grid-column:1/-1}
+section[data-section="settings"] #admin-form>label:first-child{grid-column:1/-1;max-width:560px}
 section[data-section="telegram"] #password-form{max-width:560px}
 section[data-section="lookup"]>article:first-child>.buttons.group-list-actions{margin:16px 0}
 section[data-section="lookup"] .inline-form{gap:14px;align-items:end}
@@ -339,7 +325,7 @@ section[data-section="groups"] .hint{line-height:1.55}
 @media(max-width:800px){
   section[data-section]:not([data-section="overview"])>article{padding:17px}
   section[data-section]:not([data-section="overview"]) form:not(.inline-form){column-gap:12px}
-  section[data-section="notification"] .grid>form{column-gap:10px}
+  section[data-section="settings"] .settings-notifications .grid>form{column-gap:10px}
 }
 @media(max-width:680px){
   section[data-section]:not([data-section="overview"])>article{padding:15px}
@@ -349,9 +335,9 @@ section[data-section="groups"] .hint{line-height:1.55}
   section[data-section]:not([data-section="overview"]) form:not(.inline-form)>.buttons,
   section[data-section]:not([data-section="overview"]) form:not(.inline-form)>button,
   section[data-section]:not([data-section="overview"]) form:not(.inline-form)>.hint{grid-column:1}
-  section[data-section="notification"] .grid>form{grid-template-columns:minmax(0,1fr);column-gap:0}
-  section[data-section="notification"] .grid>form>h3,
-  section[data-section="notification"] .grid>form>.buttons{grid-column:1}
+  section[data-section="settings"] .settings-notifications .grid>form{grid-template-columns:minmax(0,1fr);column-gap:0}
+  section[data-section="settings"] .settings-notifications .grid>form>h3,
+  section[data-section="settings"] .settings-notifications .grid>form>.buttons{grid-column:1}
   section[data-section]:not([data-section="overview"]) input:not([type="checkbox"]),
   section[data-section]:not([data-section="overview"]) select{min-height:44px;font-size:16px}
   section[data-section]:not([data-section="overview"]) button{min-height:44px;font-size:13px}
@@ -376,3 +362,33 @@ section[data-section="groups"] #group-list .identity-control small:empty{display
 section[data-section="groups"] #group-list .group-test{margin-top:4px}
 @media(max-width:1080px){section[data-section="groups"] #group-list{grid-template-columns:1fr}}
 @media(max-width:680px){section[data-section="groups"] #group-list .record .grid{grid-template-columns:minmax(0,1fr);gap:0}}
+
+section[data-section="settings"]{align-items:start}
+section[data-section="settings"]>.settings-runtime{grid-column:1}
+section[data-section="settings"]>.settings-admin{grid-column:2}
+section[data-section="settings"]>.settings-notifications{grid-column:1/-1}
+section[data-section="settings"]>.backup-schedule{grid-column:1}
+section[data-section="settings"]>.backup-operations{grid-column:2}
+section[data-section="settings"] .settings-runtime .grid{max-width:none}
+section[data-section="settings"] .settings-notifications .grid>form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:13px;align-items:start;padding:16px;border:1px solid var(--line);border-radius:9px;background:#fbfcfe}
+section[data-section="settings"] .settings-notifications .grid>form>h3,
+section[data-section="settings"] .settings-notifications .grid>form>.buttons{grid-column:1/-1}
+section[data-section="settings"] .settings-notifications h3{font-size:14px;margin:0 0 10px;color:#41516a}
+section[data-section="settings"] .settings-notifications .grid>form>label{min-width:0;margin-bottom:8px;overflow-wrap:anywhere}
+section[data-section="settings"] .settings-notifications .grid>form .buttons{align-self:end;margin-top:0}
+.backup-operations .buttons{align-items:center;gap:8px}
+.backup-operations .buttons>button,.backup-operations .buttons>.file-button{min-height:40px;margin:0;line-height:1.3}
+.backup-operations .buttons>.file-button{display:inline-flex;align-items:center;justify-content:center}
+@media(max-width:1080px){section[data-section="settings"]{grid-template-columns:1fr}section[data-section="settings"]>.settings-runtime,section[data-section="settings"]>.settings-admin,section[data-section="settings"]>.settings-notifications,section[data-section="settings"]>.backup-schedule,section[data-section="settings"]>.backup-operations{grid-column:1}}
+@media(max-width:800px){
+  section[data-section="settings"]>.settings-runtime,
+  section[data-section="settings"]>.settings-admin,
+  section[data-section="settings"]>.settings-notifications,
+  section[data-section="settings"]>.backup-schedule,
+  section[data-section="settings"]>.backup-operations{grid-column:1}
+}
+@media(max-width:680px){
+  section[data-section="settings"] .settings-notifications .grid>form{grid-template-columns:minmax(0,1fr);column-gap:0}
+  section[data-section="settings"] .settings-notifications .grid>form>h3,
+  section[data-section="settings"] .settings-notifications .grid>form>.buttons{grid-column:1}
+}
