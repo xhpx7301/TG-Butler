@@ -374,6 +374,64 @@ def create_app(config: Path, *, control=system_control) -> Flask:
         asyncio.run(send())
         return jsonify(message="测试通知已发送。")
 
+    @app.post("/api/group-test")
+    @protected
+    def group_test():
+        import asyncio
+        from types import SimpleNamespace
+
+        from tg_butler.app import live_alert, make_notifier
+        from tg_butler.config import Group
+
+        group = Group.model_validate(request.get_json() or {})
+        values = dotenv_values(root / ".env")
+        monitor = NotificationCredentials(
+            bot_token=values.get("TG_MONITOR_BOT_TOKEN") or values.get("TG_BOT_TOKEN", ""),
+            notify_chat_id=values.get("TG_MONITOR_NOTIFY_CHAT_ID")
+            or values.get("TG_NOTIFY_CHAT_ID", ""),
+        )
+        report = NotificationCredentials(
+            bot_token=values.get("TG_REPORT_BOT_TOKEN") or values.get("TG_BOT_TOKEN", ""),
+            notify_chat_id=values.get("TG_REPORT_NOTIFY_CHAT_ID")
+            or values.get("TG_NOTIFY_CHAT_ID", ""),
+        )
+        settings = load_settings(config)
+        zone = ZoneInfo(settings.timezone)
+        sender = SimpleNamespace(username="tg_butler_test")
+        sample = live_alert(
+            group,
+            sender,
+            "TG-Butler 测试用户",
+            123456789,
+            "这是一条测试消息，用于检查监控群组通知与消息模板。",
+            datetime.now(zone),
+            1,
+            zone,
+        )
+        report_sample = sample.replace(
+            "监控预警：目标用户已发言", "筛选提醒：目标用户消息命中条件"
+        )
+
+        async def send():
+            monitor_notifier = make_notifier(settings, monitor)
+            same_notifier = (
+                monitor.bot_token.get_secret_value() == report.bot_token.get_secret_value()
+                and monitor.notify_chat_id == report.notify_chat_id
+            )
+            report_notifier = (
+                monitor_notifier if same_notifier else make_notifier(settings, report)
+            )
+            try:
+                await monitor_notifier.send(sample, parse_mode="HTML")
+                await report_notifier.send(report_sample, parse_mode="HTML")
+            finally:
+                await monitor_notifier.close()
+                if not same_notifier:
+                    await report_notifier.close()
+
+        asyncio.run(send())
+        return jsonify(message="监控通知与筛选提醒模板测试已发送。")
+
     @app.post("/api/summary-test")
     @protected
     def summary_test():

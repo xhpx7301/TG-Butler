@@ -218,6 +218,46 @@ def test_split_notification_credentials_are_saved_and_role_tests_use_them(web, m
     assert factory.call_args.args[1].notify_chat_id == 101
 
 
+def test_group_test_sends_monitor_and_report_templates_without_saving_changes(web, monkeypatch):
+    app, config, _ = web
+    client = app.test_client()
+    headers = authenticate(client)
+    save_settings(
+        config,
+        {"groups": [{"id": -100123456, "name": "测试群", "watch_users": [7]}],
+         "checkins": [], "data_dir": "data"},
+    )
+    messages = []
+
+    class FakeNotifier:
+        async def send(self, text, parse_mode=None):
+            messages.append((self.chat_id, text, parse_mode))
+
+        async def close(self):
+            pass
+
+    def factory(settings, credentials):
+        notifier = FakeNotifier()
+        notifier.chat_id = credentials.notify_chat_id
+        return notifier
+
+    monkeypatch.setattr("tg_butler.app.make_notifier", factory)
+    response = client.post(
+        "/api/group-test",
+        json={"id": -100123456, "name": "临时测试名称", "watch_users": [8]},
+        headers=headers,
+    )
+    assert response.status_code == 200
+    assert response.json["message"] == "监控通知与筛选提醒模板测试已发送。"
+    assert len(messages) == 2
+    assert {message[0] for message in messages} == {456}
+    assert all(message[2] == "HTML" for message in messages)
+    assert "临时测试名称" in messages[0][1]
+    assert "监控预警：目标用户已发言" in messages[0][1]
+    assert "筛选提醒：目标用户消息命中条件" in messages[1][1]
+    assert "测试群" in config.read_text(encoding="utf-8")
+
+
 def test_ai_models_and_connection_use_current_form_values(web, monkeypatch):
     app, _, _ = web
     client = app.test_client()
