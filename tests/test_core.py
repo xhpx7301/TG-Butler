@@ -97,6 +97,14 @@ def test_accounts_use_separate_telethon_session_paths(tmp_path):
     assert Path(extra.session.filename).parts[-2:] == ("accounts", "work.session")
 
 
+def test_generated_account_id_length_is_accepted():
+    account_id = "acc_" + "a" * 32
+    settings = Settings.model_validate(
+        {"accounts": [{"id": "default"}, {"id": account_id, "name": "工作号"}]}
+    )
+    assert settings.accounts[1].id == account_id
+
+
 def test_report_filters_match_keywords_links_and_images():
     image = SimpleNamespace(media=SimpleNamespace(document=SimpleNamespace(mime_type="image/jpeg")))
     group = Group(

@@ -90,7 +90,7 @@ class Notifications(StrictModel):
 
 
 class TelegramAccount(StrictModel):
-    id: str = Field(default="default", pattern=r"^[a-z][a-z0-9_-]{0,31}$")
+    id: str = Field(default="default", pattern=r"^[a-z][a-z0-9_-]{0,39}$")
     name: str = Field(default="默认账号", min_length=1, max_length=64)
 
 

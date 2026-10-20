@@ -153,7 +153,7 @@ def _read_archive(upload: Path) -> dict[str, bytes]:
                     len(path.parts) == 3
                     and path.parts[0] == "runtime"
                     and path.parts[1] == "accounts"
-                    and re.fullmatch(r"[a-z][a-z0-9_-]{0,31}\.session", path.parts[2])
+                    and re.fullmatch(r"[a-z][a-z0-9_-]{0,39}\.session", path.parts[2])
                 ):
                     raise ValueError("备份包包含未知文件，已拒绝导入")
                 if member.name in result:
