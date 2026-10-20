@@ -112,6 +112,44 @@ class TelegramGateway:
                 finally:
                     store.close()
             dialogs = await client.get_dialogs()
+            if action == "identify":
+                kind = str(data.get("kind", ""))
+                if kind not in {"group", "user"}:
+                    raise ValueError("无效的查询类型")
+                raw_ids = data.get("ids", [data.get("id", "")])
+                if not isinstance(raw_ids, list) or not 1 <= len(raw_ids) <= 20:
+                    raise ValueError("每次最多核对 20 个 ID")
+                results = []
+                for raw_id in raw_ids:
+                    try:
+                        entity_id = int(raw_id)
+                        if not entity_id:
+                            raise ValueError
+                        if kind == "group":
+                            dialog = next(item for item in dialogs if item.id == entity_id)
+                            entity = dialog.entity
+                            if isinstance(entity, User):
+                                raise ValueError
+                        else:
+                            entity = await client.get_entity(entity_id)
+                            if not isinstance(entity, User):
+                                raise ValueError
+                        results.append(
+                            {
+                                "id": entity_id,
+                                "name": get_display_name(entity)
+                                or getattr(entity, "title", "")
+                                or "",
+                                "username": getattr(entity, "username", "") or "",
+                            }
+                        )
+                    except (ValueError, StopIteration, TypeError):
+                        results.append({"id": str(raw_id), "error": "当前账号无法识别此 ID"})
+                    except Exception:
+                        results.append(
+                            {"id": str(raw_id), "error": "查询失败，请确认账号权限和 ID"}
+                        )
+                return {"items": results}
             if action == "dialogs":
                 items = []
                 for item in dialogs:

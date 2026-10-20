@@ -131,6 +131,22 @@ async def test_resolve_user_username_returns_user_id(gateway):
     client.get_entity.assert_awaited_once_with("example")
 
 
+async def test_identify_user_id_returns_name_and_username(gateway):
+    manager, client, _ = gateway
+    client.is_user_authorized.return_value = True
+    client.get_dialogs.return_value = []
+    client.get_entity.return_value = User(
+        id=42, is_self=False, first_name="Example", username="example"
+    )
+
+    result = await manager.request(
+        "identify", {"kind": "user", "ids": ["42"]}, "owner"
+    )
+
+    assert result == {"items": [{"id": 42, "name": "Example", "username": "example"}]}
+    client.get_entity.assert_awaited_once_with(42)
+
+
 async def test_resolve_rejects_private_invite_links(gateway):
     manager, client, _ = gateway
     client.is_user_authorized.return_value = True
