@@ -89,6 +89,31 @@ ssh -N -L 15678:127.0.0.1:15678 root@你的服务器IP
 
 如果原生部署需要直接对公网提供网页，在 `bu → 1 网页后台 → 3 监听设置` 将监听地址改为 `0.0.0.0`，保存后重启网页服务，并在防火墙放行配置的端口。更推荐保持 `127.0.0.1`，由 Nginx、Caddy 或其他 HTTPS 反向代理对外提供访问；通过未加密的公网 HTTP 输入管理员密码、验证码或账号密钥会泄露敏感信息。
 
+### 原生部署启动故障排查
+
+`bu` 是原生部署安装的 `/usr/local/bin/bu` 命令。若终端提示 `bu: command not found`，说明安装流程没有完成或只执行了网页后台的手动安装。保留现有配置和数据的修复方式是：
+
+```bash
+sudo install -m 755 /opt/tg-butler/deploy/bu /usr/local/bin/bu
+sudo bash /opt/tg-butler/deploy/setup-web.sh
+sudo systemctl restart tg-butler-web.service
+```
+
+如果 `/opt/tg-butler/deploy/bu` 不存在，重新执行完整安装脚本的非交互模式：
+
+```bash
+sudo bash /opt/tg-butler/deploy/install.sh --non-interactive
+```
+
+网页“启动任务服务”失败时，先查看监控服务的实际错误；常见原因是凭据未配置、配置格式错误或服务文件尚未注册：
+
+```bash
+sudo systemctl status tg-butler.service --no-pager
+sudo journalctl -u tg-butler.service -n 100 --no-pager
+```
+
+网页控制按钮需要 `tg-butler-web.service`、`/usr/local/libexec/tg-butler-control` 和 `/etc/sudoers.d/tg-butler-web` 同时存在；`setup-web.sh` 会重新安装这些组件。Docker 部署不使用 `bu` 或 systemd，请使用 `docker compose ps` 和 `docker compose logs` 排查。
+
 ### 管理员和网页监听设置
 
 - **网页 → 管理员账户**：输入当前密码，修改用户名和密码。当前为单管理员模式；全部网页登录会话会失效，需要重新登录。

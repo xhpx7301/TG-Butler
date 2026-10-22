@@ -60,7 +60,10 @@ def system_control(action: str) -> str:
         command = ["sudo", "-n", "/usr/local/libexec/tg-butler-control", action]
     result = subprocess.run(command, capture_output=True, text=True, timeout=30, check=False)
     if result.returncode != 0:
-        raise ValueError("服务操作失败，请在 bu 中检查网页管理服务的安装和授权")
+        detail = (result.stderr or result.stdout).strip()
+        if detail:
+            raise ValueError(f"服务操作失败：{detail[-1000:]}")
+        raise ValueError("服务操作失败，请运行 deploy/setup-web.sh 检查网页管理服务的安装和授权")
     return result.stdout[-20000:]
 
 
