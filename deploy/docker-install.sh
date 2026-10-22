@@ -38,6 +38,15 @@ ensure_port_available() {
     fi
 }
 
+cleanup_previous_tg_butler() {
+    local container_id container_name
+    while IFS='|' read -r container_id container_name; do
+        [[ -n "$container_id" && "$container_name" == *tg-butler* ]] || continue
+        printf '检测到旧版 TG-Butler 容器 %s，占用 15678，正在停止并移除（数据卷会保留）。\n' "$container_name"
+        docker rm -f "$container_id" >/dev/null
+    done < <(docker ps --filter publish=15678 --format '{{.ID}}|{{.Names}}' 2>/dev/null || true)
+}
+
 main() {
     [[ "$EUID" -eq 0 ]] || die '请使用 root 或 sudo 运行。'
     [[ -f /etc/os-release ]] || die '无法识别操作系统。'
@@ -88,6 +97,7 @@ main() {
     install -m 755 "$INSTALL_DIR/deploy/docker-menu.sh" /usr/local/bin/bu
     # 清理本项目上次失败或旧版本留下的容器，但保留 tg-butler-state 数据卷。
     compose down --remove-orphans >/dev/null 2>&1 || true
+    cleanup_previous_tg_butler
     ensure_port_available
     compose up -d --build
     printf '\nDocker 部署完成。\n'
