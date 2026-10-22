@@ -91,7 +91,7 @@ docker compose up -d --build
 
 原生部署已有数据时，先在原生网页的“备份与恢复”中导出备份；Docker 启动后登录新网页，再使用“选择备份并导入”恢复配置、凭据、Telegram 会话和消息记录。Docker 的数据卷不会自动读取 `/opt/tg-butler/data`。
 
-Docker 部署的备份位于容器内 `/var/lib/tg-butler/data/backups/`，对应 Compose 的 `tg-butler-state` 持久化卷；网页“导出备份到本地”可将文件下载到当前浏览器。Docker 网页的“更新项目说明”按钮会显示宿主机命令；实际更新执行 `bu update` 或 `docker compose up -d --build`。停止、启动和查看监控日志仍可使用网页中的服务控制按钮。
+Docker 部署的备份位于容器内 `/var/lib/tg-butler/data/backups/`，对应 Compose 的 `tg-butler-state` 持久化卷；网页“导出备份到本地”可将文件下载到当前浏览器。Docker 网页的“更新项目说明”按钮会显示宿主机命令；实际更新执行 `bu update` 或 `docker compose up -d --build`。停止、启动和查看监控日志仍可使用网页中的服务控制按钮。服务器输入 `bu` 后，选择 **7** 可卸载 Docker 部署但保留数据卷，选择 **8** 可卸载并清除全部容器、镜像、项目目录和数据卷；两项都会要求确认。
 
 ## 中文网页管理后台
 

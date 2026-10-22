@@ -30,6 +30,12 @@ update() {
     compose up -d --build
 }
 
+uninstall() {
+    local mode="$1"
+    bash "$INSTALL_DIR/deploy/docker-uninstall.sh" "$mode"
+    exit 0
+}
+
 action="${1:-menu}"
 case "$action" in
     status) compose ps ;;
@@ -41,7 +47,7 @@ case "$action" in
     menu)
         while true; do
             printf '\nTG-Butler Docker 管理\n'
-            printf '1. 查看状态\n2. 启动\n3. 停止\n4. 重启\n5. 查看日志\n6. 更新项目\n0. 退出\n'
+            printf '1. 查看状态\n2. 启动\n3. 停止\n4. 重启\n5. 查看日志\n6. 更新项目\n7. 卸载 Docker（保留数据）\n8. 卸载 Docker 并清除全部数据\n0. 退出\n'
             read -r -p '请选择：' choice
             case "$choice" in
                 1) compose ps ;;
@@ -50,10 +56,14 @@ case "$action" in
                 4) compose up -d --force-recreate ;;
                 5) compose logs --tail=100 ;;
                 6) update ;;
+                7) uninstall --keep-data ;;
+                8) uninstall --purge ;;
                 0) exit 0 ;;
                 *) printf '无效选项。\n' >&2 ;;
             esac
         done
         ;;
-    *) die "用法：bu [status|start|stop|restart|logs|update]" ;;
+    uninstall-keep-data) uninstall --keep-data ;;
+    uninstall) uninstall --purge ;;
+    *) die "用法：bu [status|start|stop|restart|logs|update|uninstall-keep-data|uninstall]" ;;
 esac
