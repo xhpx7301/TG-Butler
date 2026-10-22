@@ -3,9 +3,20 @@ set -eu
 
 STATE_DIR=/var/lib/tg-butler
 DATA_DIR="$STATE_DIR/data"
+SUPERVISOR_CONFIG=/etc/supervisor/supervisord.conf
 
 umask 077
 mkdir -p "$DATA_DIR"
+
+if [ ! -f "$SUPERVISOR_CONFIG" ]; then
+    printf '错误：缺少 Supervisor 配置文件：%s\n' "$SUPERVISOR_CONFIG" >&2
+    exit 1
+fi
+# The web process runs as tgbutler and invokes supervisorctl.  Make the
+# packaged config readable even when an older image layer used restrictive
+# permissions.
+chmod 755 /etc/supervisor
+chmod 644 "$SUPERVISOR_CONFIG"
 
 if [ ! -f "$STATE_DIR/.env" ]; then
     cp /opt/tg-butler/.env.example "$STATE_DIR/.env"
@@ -28,4 +39,4 @@ else
     export TG_BUTLER_MONITOR_AUTOSTART=false
 fi
 
-exec /opt/venv/bin/supervisord -c /etc/supervisor/supervisord.conf
+exec /opt/venv/bin/supervisord -c "$SUPERVISOR_CONFIG"

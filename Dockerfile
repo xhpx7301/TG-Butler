@@ -22,7 +22,9 @@ COPY docker/supervisord.conf /etc/supervisor/supervisord.conf
 COPY docker/entrypoint.sh /usr/local/bin/tg-butler-entrypoint
 COPY docker/tg-butler-control /usr/local/bin/tg-butler-control
 
-RUN chmod 755 /usr/local/bin/tg-butler-entrypoint /usr/local/bin/tg-butler-control
+RUN chmod 755 /usr/local/bin/tg-butler-entrypoint /usr/local/bin/tg-butler-control \
+    && chmod 755 /etc/supervisor \
+    && chmod 644 /etc/supervisor/supervisord.conf
 
 EXPOSE 15678
 
