@@ -29,10 +29,29 @@ class Group(StrictModel):
     daily_summary: bool = True
     notify_all: bool = False
     watch_users: list[int] = Field(default_factory=list)
+    report_filter_enabled: bool = False
     report_keywords: list[str] = Field(default_factory=list)
     report_match_mode: str = "any"
     report_images: bool = False
     report_links: bool = False
+
+    @model_validator(mode="before")
+    @classmethod
+    def migrate_report_filter_enabled(cls, value):
+        """Keep the previous filtered-bot behavior for existing configs.
+
+        Before this switch existed, configuring any report filter enabled the
+        custom bot implicitly.  Preserve that behavior when loading an old
+        config, while allowing an explicit ``false`` to turn filtering off.
+        """
+        if isinstance(value, dict) and "report_filter_enabled" not in value:
+            value = dict(value)
+            value["report_filter_enabled"] = bool(
+                value.get("report_keywords")
+                or value.get("report_images")
+                or value.get("report_links")
+            )
+        return value
 
     @model_validator(mode="after")
     def validate_report_filters(self) -> Group:

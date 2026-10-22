@@ -191,18 +191,33 @@ async def run(
                     getattr(event.chat, "username", None),
                     watched,
                 )
-                monitor_notifier.enqueue(alert, parse_mode="HTML")
+                # A disabled filter sends every watched-user message through
+                # the monitor/daily bot.  When enabled, watched-user alerts
+                # are routed to the custom bot only when a rule matches.
+                if group.notify_all or (watched and not group.report_filter_enabled):
+                    monitor_notifier.enqueue(alert, parse_mode="HTML")
                 if (
                     watched
-                    and not same_notifier
-                    and report_alert_matches(group, text, event.message)
-                ):
-                    report_notifier.enqueue_copy(
-                        alert.replace("监控预警：目标用户已发言", "筛选提醒：目标用户消息命中条件"),
-                        event.chat_id,
-                        event.id,
-                        parse_mode="HTML",
+                    and group.report_filter_enabled
+                    and not (same_notifier and group.notify_all)
+                    and report_alert_matches(
+                        group, text, event.message
                     )
+                ):
+                    filtered_alert = alert.replace(
+                        "监控预警：目标用户已发言", "筛选提醒：目标用户消息命中条件"
+                    )
+                    if same_notifier:
+                        # A legacy single-bot setup cannot copy from the
+                        # source chat, so keep filtered delivery on that bot.
+                        monitor_notifier.enqueue(filtered_alert, parse_mode="HTML")
+                    else:
+                        report_notifier.enqueue_copy(
+                            filtered_alert,
+                            event.chat_id,
+                            event.id,
+                            parse_mode="HTML",
+                        )
         except Exception as exc:
             log.error(
                 "Message processing failed for chat %s (%s)", event.chat_id, type(exc).__name__

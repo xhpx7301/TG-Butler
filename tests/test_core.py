@@ -124,6 +124,17 @@ def test_report_filters_match_keywords_links_and_images():
     assert not report_alert_matches(group, "只有重要", SimpleNamespace())
 
 
+def test_report_filter_switch_routes_legacy_and_explicit_configs():
+    legacy = Group(id=1, report_keywords=["重要"])
+    assert legacy.report_filter_enabled is True
+
+    default = Group(id=2)
+    assert default.report_filter_enabled is False
+
+    disabled = Group(id=3, report_filter_enabled=False, report_keywords=["重要"])
+    assert disabled.report_filter_enabled is False
+
+
 def test_live_alert_is_structured_escaped_and_has_direct_link():
     group = Group(id=-100123456, name="目标群组监控")
     alert = live_alert(

@@ -144,6 +144,7 @@ class TelegramMenu:
                 lines.append(
                     f"{group.id}  {group.name or '未命名'}\n"
                     f"  全群提醒：{'开' if group.notify_all else '关'} · "
+                    f"自定义筛选：{'开' if group.report_filter_enabled else '关'} · "
                     f"日报：{'开' if group.daily_summary else '关'}\n"
                     f"  关注用户：{len(group.watch_users)} 个"
                 )
@@ -152,6 +153,7 @@ class TelegramMenu:
             "\n\n修改群组请发送：\n"
             "/group 群组ID notify_all on\n"
             "/group 群组ID daily_summary off\n"
+            "/group 群组ID report_filter_enabled on\n"
             "/group 群组ID watch_users 123,456\n"
             "/group 群组ID report_keywords 关键词1,关键词2"
         )
@@ -232,7 +234,7 @@ class TelegramMenu:
     async def _change_group(self, command: str) -> None:
         match = re.fullmatch(
             r"/group\s+(-?\d+)\s+"
-            r"(name|notify_all|daily_summary|watch_users|report_keywords|report_images|report_links)\s+(.+)",
+            r"(name|notify_all|daily_summary|report_filter_enabled|watch_users|report_keywords|report_images|report_links)\s+(.+)",
             command,
         )
         if not match:
@@ -244,7 +246,13 @@ class TelegramMenu:
         )
         if group is None:
             raise ValueError("未找到该群组")
-        if field in {"notify_all", "daily_summary", "report_images", "report_links"}:
+        if field in {
+            "notify_all",
+            "daily_summary",
+            "report_filter_enabled",
+            "report_images",
+            "report_links",
+        }:
             if value.lower() not in {"on", "off", "1", "0", "true", "false"}:
                 raise ValueError("开关值请使用 on 或 off")
             group[field] = value.lower() in {"on", "1", "true"}
