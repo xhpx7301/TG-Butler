@@ -18,6 +18,26 @@ compose() {
     fi
 }
 
+port_listener() {
+    if command -v ss >/dev/null 2>&1; then
+        ss -Hlnpt 'sport = :15678' 2>/dev/null || true
+    elif command -v lsof >/dev/null 2>&1; then
+        lsof -nP -iTCP:15678 -sTCP:LISTEN 2>/dev/null || true
+    fi
+}
+
+ensure_port_available() {
+    local containers listeners
+    containers="$(docker ps --filter publish=15678 --format '{{.Names}} ({{.Ports}})' 2>/dev/null || true)"
+    if [[ -n "$containers" ]]; then
+        die "端口 15678 已被其他 Docker 容器占用：$containers。请先停止该容器后重新执行安装脚本。"
+    fi
+    listeners="$(port_listener)"
+    if [[ -n "$listeners" ]]; then
+        die "端口 15678 仍被其他进程占用：$listeners。请先停止该服务，或执行 ss -ltnp | grep ':15678' 查看占用者。"
+    fi
+}
+
 main() {
     [[ "$EUID" -eq 0 ]] || die '请使用 root 或 sudo 运行。'
     [[ -f /etc/os-release ]] || die '无法识别操作系统。'
@@ -66,6 +86,9 @@ main() {
         printf '原有 bu 命令已备份为 /usr/local/bin/bu.native。\n'
     fi
     install -m 755 "$INSTALL_DIR/deploy/docker-menu.sh" /usr/local/bin/bu
+    # 清理本项目上次失败或旧版本留下的容器，但保留 tg-butler-state 数据卷。
+    compose down --remove-orphans >/dev/null 2>&1 || true
+    ensure_port_available
     compose up -d --build
     printf '\nDocker 部署完成。\n'
     printf '网页地址：http://服务器IP:15678\n'

@@ -29,6 +29,15 @@ bu update
 
 公网使用时请在 15678 前配置 HTTPS 反向代理；如果只通过 SSH 隧道访问，可将 Compose 端口改为 `127.0.0.1:15678:15678`。配置、账号会话、消息数据库和备份保存在 Docker 卷 `tg-butler-state` 中。
 
+如果安装时提示 `port is already allocated`，说明服务器的 `15678` 已被其他服务占用。先查看占用者并停止对应服务，再重新执行一键命令：
+
+```bash
+sudo ss -ltnp | grep ':15678'
+sudo docker ps --filter publish=15678
+```
+
+安装脚本会自动清理本项目上一次失败留下的容器，但不会删除 `tg-butler-state` 数据卷；其他项目或进程占用端口时，需要人工处理。
+
 ## 一键安装（Debian 12 / 13）
 
 在服务器的 SSH 终端中执行（需要已安装 `curl`，普通用户需要 sudo 权限）：
