@@ -2,6 +2,15 @@
 
 在 Debian 服务器常驻运行的个人 Telegram 助手：监控指定群组和用户、生成每日摘要、定时发送签到命令，并通过你创建的 Telegram 机器人通知你。
 
+项目提供两种互相独立的部署方式，请先选择一种：
+
+| 部署方式 | 服务管理 | 默认网页监听 | 配置和数据位置 |
+| --- | --- | --- | --- |
+| Debian 原生部署 | systemd / `bu` | `127.0.0.1:15678` | `/opt/tg-butler` |
+| Docker Compose | 容器内 Supervisor | `0.0.0.0:15678` | Docker 卷 `tg-butler-state` |
+
+Docker Compose 不会修改已经安装的 Debian systemd 服务。看到 `tg-butler-web` 监听 `127.0.0.1:15678`，说明当前运行的是原生部署；Docker 部署应看到 `docker compose ps` 中的容器，并由 Compose 发布端口。
+
 ## 一键安装（Debian 12 / 13）
 
 在服务器的 SSH 终端中执行（需要已安装 `curl`，普通用户需要 sudo 权限）：
@@ -34,7 +43,7 @@ sudo bash deploy/install.sh --non-interactive
 
 ## Docker 部署（可选）
 
-项目也提供 Docker Compose 部署方式。容器内由 Supervisor 管理网页后台和监控任务，配置、Telegram 登录会话、消息数据库、网页管理员及服务器备份保存在 Docker 持久化卷中。首次启动只运行网页后台，完成网页配置后点击“启动任务”；通过网页启动过的监控任务会在容器重启后自动恢复。
+项目也提供 Docker Compose 部署方式。容器内由 Supervisor 管理网页后台和监控任务，配置、Telegram 登录会话、消息数据库、网页管理员及服务器备份保存在 Docker 持久化卷中。首次启动只运行网页后台，完成网页配置后点击“启动任务”；通过网页启动过的监控任务会在容器重启后自动恢复。此方式不会复用 `/opt/tg-butler`，也不会自动接管或迁移原生 systemd 服务。
 
 在服务器安装 Docker Engine 和 Compose 插件后，在项目目录执行：
 
@@ -45,6 +54,15 @@ docker compose up -d --build
 ```
 
 Compose 默认将网页后台发布到服务器的 `15678` 端口（监听所有网卡），可直接通过 `http://服务器IP:15678` 访问。公网使用时建议在前面配置 Nginx 或 Caddy 的 HTTPS 反向代理，并在容器内执行 `docker compose exec -it tg-butler /opt/venv/bin/python -m tg_butler.admin settings --root /var/lib/tg-butler`，将“仅允许 HTTPS Cookie”设为 `y` 后重启容器；不要通过未加密的公网 HTTP 输入管理员密码、验证码或账号密钥。需要限制为本机访问时，将 `docker-compose.yml` 的端口改为 `127.0.0.1:15678:15678`，再使用 SSH 隧道。
+
+切换到 Docker 前先停止原生服务，避免两个服务争用端口：
+
+```bash
+sudo systemctl disable --now tg-butler-web.service tg-butler.service
+docker compose up -d --build
+```
+
+原生部署已有数据时，先在原生网页的“备份与恢复”中导出备份；Docker 启动后登录新网页，再使用“选择备份并导入”恢复配置、凭据、Telegram 会话和消息记录。Docker 的数据卷不会自动读取 `/opt/tg-butler/data`。
 
 Docker 部署的备份位于容器内 `/var/lib/tg-butler/data/backups/`，对应 Compose 的 `tg-butler-state` 持久化卷；网页“导出备份到本地”可将文件下载到当前浏览器。更新 Docker 部署时，在项目目录执行 `docker compose up -d --build`，网页中的“更新 TG-Butler”按钮不用于容器更新。停止、启动和查看监控日志仍可使用网页中的服务控制按钮。
 
@@ -68,6 +86,8 @@ ssh -N -L 15678:127.0.0.1:15678 root@你的服务器IP
 5. 按网页指引完成 Telegram 应用凭据 → 账号登录 → 通知机器人 → 群组/日报/签到 → 启动任务服务。可以不填 Telegram 凭据先启动后台，不影响首次配置。
 
 默认仅监听服务器的 **127.0.0.1:15678**，不需要开放公网 15678。网页后台是 `tg-butler-web.service`，监控任务是 `tg-butler.service`，二者独立。服务日志：`sudo journalctl -u tg-butler-web -n 80`。网页查询群组、成员和登录时会短暂停止监控任务并恢复原运行状态，暂停期间不补抓消息。
+
+如果原生部署需要直接对公网提供网页，在 `bu → 1 网页后台 → 3 监听设置` 将监听地址改为 `0.0.0.0`，保存后重启网页服务，并在防火墙放行配置的端口。更推荐保持 `127.0.0.1`，由 Nginx、Caddy 或其他 HTTPS 反向代理对外提供访问；通过未加密的公网 HTTP 输入管理员密码、验证码或账号密钥会泄露敏感信息。
 
 ### 管理员和网页监听设置
 
