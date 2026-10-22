@@ -58,6 +58,22 @@ def test_update_requires_authentication_and_uses_fixed_control_action(web):
     control.assert_called_once_with("update")
 
 
+def test_docker_mode_uses_container_controls_and_host_update_message(web, monkeypatch):
+    app, _, control = web
+    monkeypatch.setenv("TG_BUTLER_CONTROL_MODE", "supervisor")
+    client = app.test_client()
+    page = client.get("/")
+    assert page.status_code == 200
+    assert "Docker 更新方式" in page.get_data(as_text=True)
+    assert "bu → 1 网页后台" not in page.get_data(as_text=True)
+
+    headers = authenticate(client)
+    response = client.post("/api/update", json={}, headers=headers)
+    assert response.status_code == 200
+    assert "docker compose up -d --build" in response.json["message"]
+    control.assert_not_called()
+
+
 def test_telegram_identify_route_is_available(web):
     app, _, _ = web
     client = app.test_client()

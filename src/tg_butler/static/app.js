@@ -21,7 +21,7 @@ function addStateToggle(input){
 }
 function fill(id, data){ const form=$(id); for(const [key,value] of Object.entries(data)){const field=form.elements.namedItem(key);if(!field)continue;if(field.type==="checkbox"){field.checked=!!value;syncStateToggle(field);}else field.value=value??"";} }
 function bindForm(id, handler){ $(id).addEventListener("submit",async event=>{event.preventDefault();const buttons=[...event.target.querySelectorAll("button")];buttons.forEach(b=>b.disabled=true);try{await handler(fields(event.target),event.target);}catch(error){toast(error.message,true);}finally{buttons.forEach(b=>b.disabled=false);}}); }
-function bindButton(id, handler){ $(id).addEventListener("click",async()=>{const button=$(id);button.disabled=true;try{await handler();}catch(error){toast(error.message,true);}finally{button.disabled=false;}}); }
+function bindButton(id, handler){ const button=$(id);if(!button)return;button.addEventListener("click",async()=>{button.disabled=true;try{await handler();}catch(error){toast(error.message,true);}finally{button.disabled=false;}}); }
 const mobileNavigation=window.matchMedia("(max-width:680px)");
 function setMenuOpen(open,restoreFocus=true){
   const sidebar=$("sidebar"),mobile=mobileNavigation.matches;

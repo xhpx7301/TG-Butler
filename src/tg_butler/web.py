@@ -345,6 +345,13 @@ def create_app(config: Path, *, control=system_control) -> Flask:
     @app.post("/api/update")
     @protected
     def update():
+        if os.environ.get("TG_BUTLER_CONTROL_MODE") == "supervisor":
+            return jsonify(
+                message=(
+                    "Docker 部署不会在容器内更新，请在宿主机项目目录执行："
+                    "docker compose up -d --build"
+                )
+            )
         return jsonify(
             message=control("update")
             or "更新已开始，网页会短暂断开；完成后请刷新页面确认版本和服务状态。"
