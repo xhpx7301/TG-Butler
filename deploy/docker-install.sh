@@ -27,10 +27,23 @@ main() {
         || die '此脚本仅支持 Debian 12 / 13。'
 
     apt-get update
-    DEBIAN_FRONTEND=noninteractive apt-get install -y ca-certificates git docker.io
+    DEBIAN_FRONTEND=noninteractive apt-get install -y ca-certificates git
+    if command -v docker >/dev/null 2>&1; then
+        printf '检测到已有 Docker，跳过 docker.io 安装，避免与 containerd.io 冲突。\n'
+    elif apt-cache show docker-ce >/dev/null 2>&1; then
+        printf '检测到 Docker 官方软件源，安装 Docker CE。\n'
+        DEBIAN_FRONTEND=noninteractive apt-get install -y \
+            docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+    else
+        printf '未检测到 Docker 官方软件源，安装 Debian docker.io。\n'
+        DEBIAN_FRONTEND=noninteractive apt-get install -y docker.io
+    fi
     if ! docker compose version >/dev/null 2>&1 && ! command -v docker-compose >/dev/null 2>&1; then
-        DEBIAN_FRONTEND=noninteractive apt-get install -y docker-compose-plugin \
-            || DEBIAN_FRONTEND=noninteractive apt-get install -y docker-compose
+        if apt-cache show docker-compose-plugin >/dev/null 2>&1; then
+            DEBIAN_FRONTEND=noninteractive apt-get install -y docker-compose-plugin
+        else
+            DEBIAN_FRONTEND=noninteractive apt-get install -y docker-compose
+        fi
     fi
     systemctl enable --now docker
 
