@@ -1,0 +1,12 @@
+services:
+  tg-butler:
+    build:
+      context: .
+    restart: unless-stopped
+    ports:
+      - "15678:15678"
+    volumes:
+      - tg-butler-state:/var/lib/tg-butler
+
+volumes:
+  tg-butler-state:

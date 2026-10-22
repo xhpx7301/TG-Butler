@@ -1,0 +1,50 @@
+#!/bin/sh
+set -eu
+
+STATE_DIR=/var/lib/tg-butler
+MARKER="$STATE_DIR/data/monitor-enabled"
+SUPERVISORCTL=/opt/venv/bin/supervisorctl
+PROGRAM=tg-butler-monitor
+
+status() {
+    if "$SUPERVISORCTL" status "$PROGRAM" 2>/dev/null | grep -q ' RUNNING '; then
+        printf 'active\n'
+    else
+        printf 'inactive\n'
+    fi
+}
+
+case "${1:-}" in
+    status)
+        status
+        ;;
+    start)
+        touch "$MARKER"
+        if [ "$(status)" != active ]; then
+            "$SUPERVISORCTL" start "$PROGRAM"
+        fi
+        ;;
+    stop)
+        rm -f "$MARKER"
+        "$SUPERVISORCTL" stop "$PROGRAM" >/dev/null 2>&1 || true
+        printf '任务服务已停止。\n'
+        ;;
+    restart)
+        touch "$MARKER"
+        if [ "$(status)" = active ]; then
+            "$SUPERVISORCTL" restart "$PROGRAM"
+        else
+            "$SUPERVISORCTL" start "$PROGRAM"
+        fi
+        ;;
+    logs)
+        "$SUPERVISORCTL" tail "$PROGRAM" stdout
+        ;;
+    update)
+        printf 'Docker 部署请在宿主机执行 docker compose up -d --build 更新。\n' >&2
+        exit 2
+        ;;
+    *)
+        exit 2
+        ;;
+esac

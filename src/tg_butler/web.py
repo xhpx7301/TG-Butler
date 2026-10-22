@@ -52,7 +52,12 @@ SECTIONS = {
 def system_control(action: str) -> str:
     if action not in {"status", "start", "stop", "restart", "logs", "update"}:
         raise ValueError("不支持的服务操作")
-    command = ["sudo", "-n", "/usr/local/libexec/tg-butler-control", action]
+    if os.environ.get("TG_BUTLER_CONTROL_MODE") == "supervisor":
+        if action == "update":
+            raise ValueError("Docker 部署请在宿主机执行 docker compose up -d --build 更新")
+        command = ["/usr/local/bin/tg-butler-control", action]
+    else:
+        command = ["sudo", "-n", "/usr/local/libexec/tg-butler-control", action]
     result = subprocess.run(command, capture_output=True, text=True, timeout=30, check=False)
     if result.returncode != 0:
         raise ValueError("服务操作失败，请在 bu 中检查网页管理服务的安装和授权")
@@ -77,7 +82,7 @@ def create_app(config: Path, *, control=system_control) -> Flask:
     gateway = TelegramGateway(config, control)
     app.extensions["admin_store"] = admin
     app.extensions["telegram_gateway"] = gateway
-    from tg_butler.backup import create_backup, read_schedule
+    from tg_butler.backup import backup_dir, create_backup, read_schedule
 
     backup_scheduler = BackgroundScheduler(timezone="UTC")
     app.extensions["backup_scheduler"] = backup_scheduler
@@ -170,7 +175,11 @@ def create_app(config: Path, *, control=system_control) -> Flask:
 
     @app.get("/")
     def index():
-        return render_template("index.html")
+        return render_template(
+            "index.html",
+            backup_dir=backup_dir(root),
+            docker_mode=os.environ.get("TG_BUTLER_CONTROL_MODE") == "supervisor",
+        )
 
     @app.get("/api/session")
     def session_info():

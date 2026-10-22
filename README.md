@@ -32,6 +32,22 @@ sudo bash deploy/install.sh --non-interactive
 
 此模式不填写凭据、不登录、不启动监控任务；网页后台会安装并启动。如果已有运行中的监控任务，会先停止。安装完输入 `bu` 即可配置。完整手动安装流程见下文“Debian 部署”。
 
+## Docker 部署（可选）
+
+项目也提供 Docker Compose 部署方式。容器内由 Supervisor 管理网页后台和监控任务，配置、Telegram 登录会话、消息数据库、网页管理员及服务器备份保存在 Docker 持久化卷中。首次启动只运行网页后台，完成网页配置后点击“启动任务”；通过网页启动过的监控任务会在容器重启后自动恢复。
+
+在服务器安装 Docker Engine 和 Compose 插件后，在项目目录执行：
+
+```bash
+git clone --branch main --single-branch https://github.com/xhpx7301/TG-Butler.git
+cd TG-Butler
+docker compose up -d --build
+```
+
+Compose 默认将网页后台发布到服务器的 `15678` 端口（监听所有网卡），可直接通过 `http://服务器IP:15678` 访问。公网使用时建议在前面配置 Nginx 或 Caddy 的 HTTPS 反向代理，并在容器内执行 `docker compose exec -it tg-butler /opt/venv/bin/python -m tg_butler.admin settings --root /var/lib/tg-butler`，将“仅允许 HTTPS Cookie”设为 `y` 后重启容器；不要通过未加密的公网 HTTP 输入管理员密码、验证码或账号密钥。需要限制为本机访问时，将 `docker-compose.yml` 的端口改为 `127.0.0.1:15678:15678`，再使用 SSH 隧道。
+
+Docker 部署的备份位于容器内 `/var/lib/tg-butler/data/backups/`，对应 Compose 的 `tg-butler-state` 持久化卷；网页“导出备份到本地”可将文件下载到当前浏览器。更新 Docker 部署时，在项目目录执行 `docker compose up -d --build`，网页中的“更新 TG-Butler”按钮不用于容器更新。停止、启动和查看监控日志仍可使用网页中的服务控制按钮。
+
 ## 中文网页管理后台
 
 后台提供应用凭据、Telegram 手机号/验证码/两步验证登录、群组与成员 ID 查询、监控用户、通知机器人、日报/AI、签到任务、运行设置、执行记录、日志和任务服务控制。签到任务可单独执行“测试签到”，真实发送已保存的签到命令、等待回复并报告判定结果，不会占用当天正式签到次数。概览页还提供“更新 TG-Butler”按钮，可从 GitHub 更新最新脚本和依赖。每个参数旁均说明用途和获取位置。配置和密钥与 `bu` 共用，不需要重复填写；运行中的任务服务会在网页保存配置或凭据后自动重启并立即生效，已停止的服务会在下次启动时读取新配置。
