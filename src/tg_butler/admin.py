@@ -119,7 +119,7 @@ class AdminStore:
 
 def web_options(root: Path) -> dict:
     path = root / "data" / "web.json"
-    defaults = {"host": "127.0.0.1", "port": 15678, "secure_cookie": False}
+    defaults = {"host": "0.0.0.0", "port": 15678, "secure_cookie": False}
     if path.exists():
         defaults.update(json.loads(path.read_text(encoding="utf-8")))
     # Values are used as arguments, never shell command text.
@@ -163,7 +163,9 @@ def main():
             print("管理员已保存，可在网页使用新凭据登录。")
         else:
             options = web_options(args.root)
-            options["host"] = ask("监听地址（推荐 127.0.0.1）", options["host"])
+            options["host"] = ask(
+                "监听地址（公网开放填 0.0.0.0，HTTPS 代理可填 127.0.0.1）", options["host"]
+            )
             if options["host"] not in {"127.0.0.1", "0.0.0.0", "::1", "::"}:
                 raise ValueError("无效监听地址")
             options["port"] = int(ask("网页端口", options["port"]))

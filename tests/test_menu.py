@@ -206,7 +206,7 @@ def test_failed_monitor_start_stays_in_submenu_and_allows_return(menu, monkeypat
     menu.command.assert_not_called()
     output = capsys.readouterr().out
     assert "操作未完成" in output
-    assert "http://127.0.0.1:15678" in output
+    assert "http://服务器IP:15678" in output
 
 
 def test_web_access_uses_saved_port(menu, capsys):
@@ -214,8 +214,7 @@ def test_web_access_uses_saved_port(menu, capsys):
     (menu.root / "data/web.json").write_text('{"port": 23456}', encoding="utf-8")
     menu.web_access()
     output = capsys.readouterr().out
-    assert "23456:127.0.0.1:23456" in output
-    assert "http://127.0.0.1:23456" in output
+    assert "公网浏览器访问：http://服务器IP:23456" in output
 
 
 @pytest.mark.parametrize("choice", ["6", "19"])

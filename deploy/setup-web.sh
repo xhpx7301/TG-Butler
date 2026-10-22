@@ -20,4 +20,4 @@ systemctl daemon-reload
 # Enable monitoring on boot; it can be configured and started later from the website.
 systemctl enable tg-butler.service
 systemctl enable --now tg-butler-web.service
-printf '网页后台已启动并设为开机自启：默认 127.0.0.1:15678。管理员可在网页或 bu → 1 网页后台 → 2 管理员账户 修改。\n'
+printf '网页后台已启动并设为开机自启：默认监听 0.0.0.0:15678（公网开放）。请配置 HTTPS 反向代理并在防火墙放行端口；管理员可在网页或 bu → 1 网页后台 → 2 管理员账户 修改。\n'

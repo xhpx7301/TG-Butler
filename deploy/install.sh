@@ -108,12 +108,12 @@ main() {
     bash "$INSTALL_DIR/deploy/setup-web.sh"
     if [[ "$NON_INTERACTIVE" -eq 1 ]]; then
         printf '\n环境已安装，网页已启动，监控任务尚未启动。现有配置与 data/ 已保留。\n'
-        printf '通过 SSH 隧道打开网页；首次默认账号 pingzi / pingzi，已有管理员保留。\n'
+        printf '网页默认监听 0.0.0.0:15678，可通过服务器 IP 访问；首次默认账号 pingzi / pingzi，已有管理员保留。请配置 HTTPS。\n'
         return 0
     fi
 
     printf '\n[5/5] 安装完成，进入 bu 中文管理菜单\n' >&3
-    printf '网页后台已自动开启。首次默认账号 pingzi / pingzi，已有管理员保留；通过 SSH 隧道访问本机 15678 完成配置。\n' >&3
+    printf '网页后台已自动开启。默认监听 0.0.0.0:15678，可通过服务器 IP 访问；首次默认账号 pingzi / pingzi，已有管理员保留。请配置 HTTPS。\n' >&3
     printf '推荐先在网页配置；菜单按网页后台、Telegram 配置、监控任务、服务与日志分组，6 更新脚本。\n' >&3
     printf '以后直接输入 bu 即可管理；选择 0 退出不会停止正在运行的服务。\n' >&3
     /usr/local/bin/bu <&3 >&3 2>&3

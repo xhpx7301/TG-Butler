@@ -498,10 +498,14 @@ class Menu:
 
         options = web_options(self.root)
         port = int(options["port"])
-        target = "[::1]" if ":" in options["host"] else "127.0.0.1"
         print(f"\n网页监听：{options['host']}:{port}")
-        print(f"电脑建立 SSH 隧道：ssh -N -L {port}:{target}:{port} 用户@服务器")
-        print(f"电脑浏览器访问：http://127.0.0.1:{port}")
+        if options["host"] in {"0.0.0.0", "::"}:
+            print(f"公网浏览器访问：http://服务器IP:{port}")
+            print("公网访问请配置 HTTPS 反向代理，并在防火墙放行此端口。")
+        else:
+            target = "[::1]" if ":" in options["host"] else "127.0.0.1"
+            print(f"电脑建立 SSH 隧道：ssh -N -L {port}:{target}:{port} 用户@服务器")
+            print(f"电脑浏览器访问：http://127.0.0.1:{port}")
         if options["secure_cookie"]:
             print("已启用 HTTPS Cookie，请通过已配置的 HTTPS 代理域名登录。")
         print("首次默认账号：pingzi / pingzi；已有账户保留，修改或重置请进入“管理员账户”。")
