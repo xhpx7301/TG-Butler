@@ -11,6 +11,24 @@
 
 Docker Compose 不会修改已经安装的 Debian systemd 服务。看到 `tg-butler-web` 监听 `127.0.0.1:15678`，说明当前运行的是原生部署；Docker 部署应看到 `docker compose ps` 中的容器，并由 Compose 发布端口。
 
+## 推荐：Docker 一键部署
+
+在全新的 Debian 12 / 13 服务器执行下面一条命令。脚本会安装 Docker、下载项目、停止占用 15678 的原生服务、构建并启动容器，同时安装 `bu` 管理命令：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/xhpx7301/TG-Butler/main/deploy/docker-install.sh | sudo bash
+```
+
+部署完成后访问 `http://服务器IP:15678`。首次进入先修改默认管理员密码，再配置 Telegram。以后在服务器输入 `bu` 可打开 Docker 菜单：启动、停止、重启、查看日志和更新项目。更新项目选择菜单 **6**，或执行：
+
+```bash
+bu update
+```
+
+如果服务器原来已有原生部署的 `bu`，安装脚本会将旧命令保留为 `/usr/local/bin/bu.native`，新的 `bu` 默认管理 Docker 部署。
+
+公网使用时请在 15678 前配置 HTTPS 反向代理；如果只通过 SSH 隧道访问，可将 Compose 端口改为 `127.0.0.1:15678:15678`。配置、账号会话、消息数据库和备份保存在 Docker 卷 `tg-butler-state` 中。
+
 ## 一键安装（Debian 12 / 13）
 
 在服务器的 SSH 终端中执行（需要已安装 `curl`，普通用户需要 sudo 权限）：
@@ -41,9 +59,9 @@ sudo bash deploy/install.sh --non-interactive
 
 此模式不填写凭据、不登录、不启动监控任务；网页后台会安装并启动。如果已有运行中的监控任务，会先停止。安装完输入 `bu` 即可配置。完整手动安装流程见下文“Debian 部署”。
 
-## Docker 部署（可选）
+## Docker 手动部署（高级用法）
 
-项目也提供 Docker Compose 部署方式。容器内由 Supervisor 管理网页后台和监控任务，配置、Telegram 登录会话、消息数据库、网页管理员及服务器备份保存在 Docker 持久化卷中。首次启动只运行网页后台，完成网页配置后点击“启动任务”；通过网页启动过的监控任务会在容器重启后自动恢复。此方式不会复用 `/opt/tg-butler`，也不会自动接管或迁移原生 systemd 服务。
+如果不使用上面的一键脚本，也可以手动安装 Docker 后执行下面的命令。容器内由 Supervisor 管理网页后台和监控任务；首次启动只运行网页后台，完成网页配置后点击“启动任务”。
 
 在服务器安装 Docker Engine 和 Compose 插件后，在项目目录执行：
 
@@ -64,7 +82,7 @@ docker compose up -d --build
 
 原生部署已有数据时，先在原生网页的“备份与恢复”中导出备份；Docker 启动后登录新网页，再使用“选择备份并导入”恢复配置、凭据、Telegram 会话和消息记录。Docker 的数据卷不会自动读取 `/opt/tg-butler/data`。
 
-Docker 部署的备份位于容器内 `/var/lib/tg-butler/data/backups/`，对应 Compose 的 `tg-butler-state` 持久化卷；网页“导出备份到本地”可将文件下载到当前浏览器。Docker 网页会在任务服务区域显示宿主机更新命令，不会尝试在容器内执行更新；更新时在项目目录执行 `docker compose up -d --build`。停止、启动和查看监控日志仍可使用网页中的服务控制按钮。
+Docker 部署的备份位于容器内 `/var/lib/tg-butler/data/backups/`，对应 Compose 的 `tg-butler-state` 持久化卷；网页“导出备份到本地”可将文件下载到当前浏览器。Docker 网页的“更新项目说明”按钮会显示宿主机命令；实际更新执行 `bu update` 或 `docker compose up -d --build`。停止、启动和查看监控日志仍可使用网页中的服务控制按钮。
 
 ## 中文网页管理后台
 

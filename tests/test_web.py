@@ -64,8 +64,9 @@ def test_docker_mode_uses_container_controls_and_host_update_message(web, monkey
     client = app.test_client()
     page = client.get("/")
     assert page.status_code == 200
-    assert "Docker 更新方式" in page.get_data(as_text=True)
-    assert "bu → 1 网页后台" not in page.get_data(as_text=True)
+    html = page.get_data(as_text=True)
+    assert 'data-docker="true"' in html
+    assert 'id="update-project"' in html
 
     headers = authenticate(client)
     response = client.post("/api/update", json={}, headers=headers)

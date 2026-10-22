@@ -349,7 +349,7 @@ def create_app(config: Path, *, control=system_control) -> Flask:
             return jsonify(
                 message=(
                     "Docker 部署不会在容器内更新，请在宿主机项目目录执行："
-                    "docker compose up -d --build"
+                    "docker compose up -d --build；或输入 bu 选择 6. 更新项目。"
                 )
             )
         return jsonify(
