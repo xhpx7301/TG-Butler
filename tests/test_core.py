@@ -133,6 +133,12 @@ def test_message_sender_id_uses_resolved_sender_and_falls_back_to_event_id():
     assert message_sender_id(SimpleNamespace(sender_id=None), None) is None
 
 
+def test_notifier_enqueue_accepts_html_parse_mode():
+    notifier = Notifier("token", 123)
+    notifier.enqueue("<b>alert</b>", parse_mode="HTML")
+    assert notifier.queue.get_nowait() == ("<b>alert</b>", None, None, "HTML")
+
+
 def test_report_filter_switch_routes_legacy_and_explicit_configs():
     legacy = Group(id=1, report_keywords=["重要"])
     assert legacy.report_filter_enabled is True

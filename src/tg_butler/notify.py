@@ -74,8 +74,8 @@ class Notifier:
             return
         raise RuntimeError("Telegram notification attempts exhausted")
 
-    def enqueue(self, text: str) -> None:
-        self._enqueue((text, None, None, None))
+    def enqueue(self, text: str, parse_mode: str | None = None) -> None:
+        self._enqueue((text, None, None, parse_mode))
 
     def enqueue_copy(
         self, text: str, from_chat_id: int, message_id: int, parse_mode: str | None = None
