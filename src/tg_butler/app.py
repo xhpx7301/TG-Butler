@@ -80,6 +80,12 @@ def report_alert_matches(group, text: str, message) -> bool:
     return bool(checks) and any(checks)
 
 
+def message_sender_id(event, sender) -> int | None:
+    """Resolve the numeric user ID used by watch lists for a new message."""
+    sender_id = getattr(sender, "id", None) or getattr(event, "sender_id", None)
+    return int(sender_id) if sender_id is not None else None
+
+
 def live_alert(
     group,
     sender,
@@ -167,23 +173,29 @@ async def run(
     async def on_message(event, group):
         try:
             sender = await event.get_sender()
-            sender_name = get_display_name(sender) if sender else str(event.sender_id)
+            sender_id = message_sender_id(event, sender)
+            if sender_id is None:
+                log.warning(
+                    "Skipping message without a resolvable sender ID in chat %s", event.chat_id
+                )
+                return
+            sender_name = get_display_name(sender) if sender else str(sender_id)
             text = event.raw_text or ("[媒体消息]" if event.message.media else "[非文本消息]")
             added = store.add_message(
                 event.chat_id,
                 event.id,
-                event.sender_id,
+                sender_id,
                 sender_name,
                 text,
                 event.message.date,
             )
-            watched = event.sender_id in group.watch_users
+            watched = sender_id in group.watch_users
             if added and (group.notify_all or watched):
                 alert = live_alert(
                     group,
                     sender,
                     sender_name,
-                    event.sender_id,
+                    sender_id,
                     text,
                     event.message.date,
                     event.id,
@@ -218,10 +230,8 @@ async def run(
                             event.id,
                             parse_mode="HTML",
                         )
-        except Exception as exc:
-            log.error(
-                "Message processing failed for chat %s (%s)", event.chat_id, type(exc).__name__
-            )
+        except Exception:
+            log.exception("Message processing failed for chat %s", event.chat_id)
 
     async def daily():
         now = datetime.now(zone)

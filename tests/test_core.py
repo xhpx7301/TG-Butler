@@ -9,7 +9,7 @@ import httpx
 import pytest
 from pydantic import ValidationError
 
-from tg_butler.app import live_alert, make_client, report_alert_matches
+from tg_butler.app import live_alert, make_client, message_sender_id, report_alert_matches
 from tg_butler.checkin import match_response, run_checkin
 from tg_butler.config import Checkin, Credentials, Group, Settings, load_settings
 from tg_butler.notify import Notifier, chunks
@@ -122,6 +122,15 @@ def test_report_filters_match_keywords_links_and_images():
     assert report_alert_matches(group, "这是重要项目 https://example.test", SimpleNamespace())
     assert report_alert_matches(group, "普通文字", image)
     assert not report_alert_matches(group, "只有重要", SimpleNamespace())
+
+
+def test_message_sender_id_uses_resolved_sender_and_falls_back_to_event_id():
+    assert (
+        message_sender_id(SimpleNamespace(sender_id=None), SimpleNamespace(id=7103835087))
+        == 7103835087
+    )
+    assert message_sender_id(SimpleNamespace(sender_id=123), None) == 123
+    assert message_sender_id(SimpleNamespace(sender_id=None), None) is None
 
 
 def test_report_filter_switch_routes_legacy_and_explicit_configs():
