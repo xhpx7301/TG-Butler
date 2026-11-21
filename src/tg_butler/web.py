@@ -121,7 +121,7 @@ def create_app(config: Path, *, control=system_control) -> Flask:
         "js": asset_version("app.js"),
     }
 
-    from tg_butler.backup import backup_dir, create_backup, read_schedule
+    from tg_butler.backup import backup_dir, create_backup, prune_backups, read_schedule
 
     backup_scheduler = BackgroundScheduler(timezone="UTC")
     app.extensions["backup_scheduler"] = backup_scheduler
@@ -148,6 +148,8 @@ def create_app(config: Path, *, control=system_control) -> Flask:
     initial_schedule = read_schedule(root)
     if config.is_file():
         configure_backup_job(initial_schedule)
+        if (root / "data" / "backups").is_dir():
+            prune_backups(root)
 
     def csrf():
         if "csrf" not in session:
@@ -409,12 +411,22 @@ def create_app(config: Path, *, control=system_control) -> Flask:
     @app.get("/api/backups")
     @protected
     def backups():
-        from tg_butler.backup import list_backups, next_backup, read_schedule
+        from tg_butler.backup import (
+            BACKUP_RETENTION,
+            BACKUP_RETENTION_DAYS,
+            list_backups,
+            next_backup,
+            read_schedule,
+        )
 
+        items = list_backups(root)
         return jsonify(
             schedule=read_schedule(root),
             next=next_backup(root, load_settings(config).timezone),
-            items=list_backups(root),
+            items=items,
+            total_size=sum(item["size"] for item in items),
+            retention_days=BACKUP_RETENTION_DAYS,
+            max_count=BACKUP_RETENTION,
         )
 
     @app.post("/api/backups/schedule")
@@ -432,22 +444,42 @@ def create_app(config: Path, *, control=system_control) -> Flask:
         target = create_backup(root, config)
         return jsonify(message="备份已创建。", name=target.name)
 
+    @app.post("/api/backups/prune")
+    @protected
+    def prune_backups_now():
+        removed, freed = prune_backups(root)
+        if not removed:
+            return jsonify(message="当前备份均在 7 天保留策略内，无需清理。", removed=0, freed=0)
+        mb = freed / (1024 * 1024)
+        return jsonify(
+            message=f"已清理 {removed} 份过期或异常备份，释放 {mb:.1f} MB 空间。",
+            removed=removed,
+            freed=freed,
+        )
+
+    @app.post("/api/backups/delete")
+    @protected
+    def delete_backup_now():
+        from tg_butler.backup import delete_backup
+
+        name = str((request.get_json() or {}).get("name", "")).strip()
+        try:
+            delete_backup(root, name)
+        except FileNotFoundError:
+            return jsonify(error="备份文件不存在"), 404
+        return jsonify(message=f"已删除备份：{name}")
+
     @app.get("/api/backups/<name>")
     @protected
     def download_backup(name):
-        from tg_butler.backup import backup_dir
+        from tg_butler.backup import backup_dir, validate_backup_name
 
-        if (
-            Path(name).name != name
-            or not name.startswith("tg-butler-")
-            or not name.endswith(".tar.gz")
-        ):
-            raise ValueError("无效的备份文件名")
-        target = backup_dir(root) / name
+        safe_name = validate_backup_name(name)
+        target = backup_dir(root) / safe_name
         if not target.is_file() or target.is_symlink():
             return jsonify(error="备份文件不存在"), 404
         return send_file(
-            target, mimetype="application/gzip", as_attachment=True, download_name=name
+            target, mimetype="application/gzip", as_attachment=True, download_name=safe_name
         )
 
     @app.post("/api/backups/import")

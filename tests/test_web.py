@@ -581,3 +581,45 @@ def test_ai_models_cache_hit_refresh_and_clear_endpoint(web, monkeypatch):
     cleared = client.post("/api/cache/clear", json={"scope": "all"}, headers=headers)
     assert cleared.status_code == 200
     assert cleared.json["ai_models"] == 0
+
+
+def test_backup_prune_and_delete_endpoints(web):
+    import os
+    import time
+
+    from tg_butler.backup import backup_dir
+
+    app, config, _ = web
+    client = app.test_client()
+    headers = authenticate(client)
+
+    created = client.post("/api/backups/create", json={}, headers=headers)
+    assert created.status_code == 200
+    fresh_name = created.json["name"]
+
+    folder = backup_dir(config.parent)
+    old_file = folder / "tg-butler-20260101-030000.tar.gz"
+    old_file.write_bytes(b"old-backup-bytes")
+    old_ts = time.time() - 15 * 86400
+    os.utime(old_file, (old_ts, old_ts))
+    empty_file = folder / "tg-butler-20261121-000000.tar.gz"
+    empty_file.write_bytes(b"")
+
+    pruned = client.post("/api/backups/prune", json={}, headers=headers)
+    assert pruned.status_code == 200
+    assert pruned.json["removed"] == 2
+    assert not old_file.exists()
+    assert not empty_file.exists()
+
+    listing = client.get("/api/backups", headers=headers)
+    assert listing.status_code == 200
+    assert listing.json["retention_days"] == 7
+    assert listing.json["max_count"] == 7
+    assert [item["name"] for item in listing.json["items"]] == [fresh_name]
+
+    deleted = client.post("/api/backups/delete", json={"name": fresh_name}, headers=headers)
+    assert deleted.status_code == 200
+    assert client.get("/api/backups", headers=headers).json["items"] == []
+
+    missing = client.post("/api/backups/delete", json={"name": fresh_name}, headers=headers)
+    assert missing.status_code == 404

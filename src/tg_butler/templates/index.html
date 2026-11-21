@@ -778,7 +778,7 @@
             <div class="panel-heading">
               <div>
                 <h2>自动备份计划</h2>
-                <p class="muted">按运行设置中的时区每日备份到服务器，最多保留最近 30 份。</p>
+                <p class="muted">按运行设置中的时区每日备份到服务器，仅保留最近 7 天（最多 7 份），超期与空文件自动清理。</p>
               </div>
             </div>
             <form id="backup-schedule-form" class="form-stack">
@@ -825,14 +825,16 @@
                 <h2>备份与恢复</h2>
                 <p class="muted">导出或恢复配置、凭据、Telegram 登录会话与消息记录。服务器存储目录：<code>{{ backup_dir }}/</code></p>
               </div>
+              <span id="backup-summary" class="cache-pill" hidden></span>
             </div>
             <div class="form-actions">
               <button type="button" id="backup-create" class="btn-primary">立即创建备份</button>
               <button type="button" id="backup-download" class="btn-secondary">导出最新备份到本地</button>
               <label class="file-button" for="backup-file">选择备份并导入</label>
               <input id="backup-file" type="file" accept=".gz,.tgz,.tar.gz,application/gzip" hidden>
+              <button type="button" id="backup-prune" class="btn-ghost">清理过期备份</button>
             </div>
-            <p class="hint">导出文件包含敏感凭据与账号会话，请妥善保管。导入支持 20 MB 以内的 <code>.tar.gz</code> 备份，导入前会自动备份当前数据并保留管理员账号与访问设置。</p>
+            <p class="hint">导出文件包含敏感凭据与账号会话，请妥善保管。服务器默认仅保留最近 7 天（最多 7 份）的备份以节省磁盘空间；导入支持 20 MB 以内的 <code>.tar.gz</code> 备份，导入前会自动备份当前数据并保留管理员账号与访问设置。</p>
             <h3 class="sub-heading">最近备份</h3>
             <div id="backup-list" class="backup-list"></div>
           </article>

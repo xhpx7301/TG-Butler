@@ -1881,9 +1881,17 @@ async function loadBackups() {
   form.elements.at.value = data.schedule.at;
 
   const tz = state?.config?.timezone || "Asia/Shanghai";
+  const keepDays = data.retention_days || 7;
   $("backup-next").textContent = data.next
-    ? `已启用，每日 ${data.schedule.at}（${tz}）；下次执行：${new Date(data.next).toLocaleString(undefined, { timeZone: tz })}`
-    : "自动备份已关闭。";
+    ? `已启用，每日 ${data.schedule.at}（${tz}，保留 ${keepDays} 天）；下次执行：${new Date(data.next).toLocaleString(undefined, { timeZone: tz })}`
+    : `自动备份已关闭（手动备份同样仅保留最近 ${keepDays} 天）。`;
+
+  const summary = $("backup-summary");
+  if (summary) {
+    const totalSize = data.total_size ?? data.items.reduce((acc, item) => acc + (item.size || 0), 0);
+    summary.textContent = `共 ${data.items.length} 份 · 占用 ${formatBytes(totalSize)}`;
+    summary.hidden = false;
+  }
 
   const list = $("backup-list");
   list.replaceChildren();
@@ -1895,9 +1903,12 @@ async function loadBackups() {
     return;
   }
   for (const item of data.items) {
+    const row = document.createElement("div");
+    row.className = `backup-item${item.size === 0 ? " is-corrupt" : ""}`;
+
     const link = document.createElement("a");
     link.href = `/api/backups/${encodeURIComponent(item.name)}`;
-    link.className = "backup-item";
+    link.className = "backup-item-link";
     link.title = `点击下载 · 创建时间：${new Date(item.created_at).toLocaleString()}`;
 
     const name = document.createElement("span");
@@ -1906,10 +1917,36 @@ async function loadBackups() {
 
     const size = document.createElement("span");
     size.className = "backup-item-size";
-    size.textContent = formatBytes(item.size);
+    size.textContent = item.size === 0 ? "0 B · 异常" : formatBytes(item.size);
 
     link.append(name, size);
-    list.append(link);
+
+    const delBtn = document.createElement("button");
+    delBtn.type = "button";
+    delBtn.className = "icon-btn backup-delete-btn";
+    delBtn.title = "删除此备份";
+    delBtn.setAttribute("aria-label", `删除备份 ${item.name}`);
+    delBtn.append(createSvg(ICONS.close));
+    delBtn.addEventListener("click", async () => {
+      const ok = await modalConfirm(
+        "删除备份文件",
+        `确认从服务器删除备份「${item.name}」（${formatBytes(item.size)}）吗？此操作不可恢复。`,
+        { confirmText: "确认删除", danger: true }
+      );
+      if (!ok) return;
+      delBtn.disabled = true;
+      try {
+        const res = await api("backups/delete", { name: item.name });
+        await loadBackups();
+        toast(res.message, "success");
+      } catch (error) {
+        toast(error.message, "error");
+        delBtn.disabled = false;
+      }
+    });
+
+    row.append(link, delBtn);
+    list.append(row);
   }
 }
 
@@ -2280,6 +2317,12 @@ bindButton("backup-create", async () => {
   const result = await api("backups/create", {});
   await loadBackups();
   toast(result.message, "success");
+});
+
+bindButton("backup-prune", async () => {
+  const result = await api("backups/prune", {});
+  await loadBackups();
+  toast(result.message, result.removed ? "success" : "info");
 });
 
 bindButton("backup-download", async () => {

@@ -10,7 +10,7 @@ import sqlite3
 import tarfile
 import tempfile
 from contextlib import closing
-from datetime import datetime
+from datetime import datetime, timedelta
 from io import StringIO
 from pathlib import Path, PurePosixPath
 from zoneinfo import ZoneInfo
@@ -21,7 +21,8 @@ from dotenv import dotenv_values
 from tg_butler.config import Settings, load_settings
 
 BACKUP_LIMIT = 20 * 1024 * 1024
-BACKUP_RETENTION = 30
+BACKUP_RETENTION = 7
+BACKUP_RETENTION_DAYS = 7
 ALLOWED_FILES = {
     "config.yaml",
     ".env",
@@ -132,9 +133,64 @@ def list_backups(root: Path) -> list[dict]:
     ]
 
 
-def prune_backups(root: Path) -> None:
-    for item in list_backups(root)[BACKUP_RETENTION:]:
-        (backup_dir(root) / item["name"]).unlink(missing_ok=True)
+def validate_backup_name(name: str) -> str:
+    if (
+        not isinstance(name, str)
+        or Path(name).name != name
+        or not name.startswith("tg-butler-")
+        or not name.endswith(".tar.gz")
+    ):
+        raise ValueError("无效的备份文件名")
+    return name
+
+
+def delete_backup(root: Path, name: str) -> int:
+    safe_name = validate_backup_name(name)
+    target = backup_dir(root) / safe_name
+    if not target.is_file() or target.is_symlink():
+        raise FileNotFoundError("备份文件不存在")
+    size = target.stat().st_size
+    target.unlink(missing_ok=True)
+    return size
+
+
+def prune_backups(
+    root: Path,
+    *,
+    keep_days: int = BACKUP_RETENTION_DAYS,
+    max_count: int = BACKUP_RETENTION,
+    now: datetime | None = None,
+) -> tuple[int, int]:
+    folder = backup_dir(root)
+    paths = [
+        path
+        for path in sorted(
+            folder.glob("tg-butler-*.tar.gz"),
+            key=lambda p: p.stat().st_mtime,
+            reverse=True,
+        )
+        if path.is_file() and not path.is_symlink()
+    ]
+    cutoff = ((now or datetime.now().astimezone()) - timedelta(days=keep_days)).timestamp()
+    removed = 0
+    freed = 0
+    kept = 0
+    for path in paths:
+        stat = path.stat()
+        if stat.st_size == 0:
+            path.unlink(missing_ok=True)
+            removed += 1
+            continue
+        if kept == 0:
+            kept += 1
+            continue
+        if kept >= max_count or stat.st_mtime < cutoff:
+            path.unlink(missing_ok=True)
+            removed += 1
+            freed += stat.st_size
+            continue
+        kept += 1
+    return removed, freed
 
 
 def _read_archive(upload: Path) -> dict[str, bytes]:
@@ -279,8 +335,6 @@ def next_backup(root: Path, timezone: str) -> str | None:
     schedule = read_schedule(root)
     if not schedule["enabled"]:
         return None
-    from datetime import timedelta
-
     zone = ZoneInfo(timezone)
     now = datetime.now(zone)
     hour, minute = map(int, schedule["at"].split(":"))
