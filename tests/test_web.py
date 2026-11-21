@@ -522,3 +522,62 @@ def test_security_headers_assets_and_cookie_settings(web):
     (config.parent / "data/web.json").write_text(json.dumps({"secure_cookie": True}))
     secure = create_app(config).test_client().get("/api/session")
     assert "Secure" in secure.headers["Set-Cookie"]
+
+
+def test_static_assets_use_versioned_cache_headers_while_api_stays_no_store(web):
+    app, _, _ = web
+    client = app.test_client()
+    page = client.get("/")
+    assert page.headers["Cache-Control"] == "no-store"
+    html = page.get_data(as_text=True)
+    assert "/static/app.css?v=" in html
+    assert "/static/app.js?v=" in html
+
+    versioned = client.get("/static/app.css?v=test123")
+    assert versioned.status_code == 200
+    assert "immutable" in versioned.headers["Cache-Control"]
+
+    unversioned = client.get("/static/app.css")
+    assert unversioned.status_code == 200
+    assert "must-revalidate" in unversioned.headers["Cache-Control"]
+
+    session_resp = client.get("/api/session")
+    assert session_resp.headers["Cache-Control"] == "no-store"
+
+
+def test_ai_models_cache_hit_refresh_and_clear_endpoint(web, monkeypatch):
+    app, _, _ = web
+    client = app.test_client()
+    headers = authenticate(client)
+    models = AsyncMock(side_effect=[["gpt-5.5", "deepseek-chat"], ["gpt-5.5", "claude-4"]])
+    monkeypatch.setattr("tg_butler.web.list_models", models)
+    payload = {
+        "api_url": "https://cache-demo.test/v1/chat/completions",
+        "api_key": "demo-key",
+    }
+
+    first = client.post("/api/ai/models", json=payload, headers=headers)
+    assert first.status_code == 200
+    assert first.json == {"models": ["gpt-5.5", "deepseek-chat"]}
+    assert first.headers["X-Cache"] == "MISS"
+    assert models.await_count == 1
+
+    second = client.post("/api/ai/models", json=payload, headers=headers)
+    assert second.status_code == 200
+    assert second.json == {"models": ["gpt-5.5", "deepseek-chat"]}
+    assert second.headers["X-Cache"] == "HIT"
+    assert models.await_count == 1
+
+    stats = client.get("/api/cache", headers=headers)
+    assert stats.status_code == 200
+    assert stats.json["ai_models"] == 1
+
+    refreshed = client.post("/api/ai/models", json={**payload, "refresh": True}, headers=headers)
+    assert refreshed.status_code == 200
+    assert refreshed.json == {"models": ["gpt-5.5", "claude-4"]}
+    assert refreshed.headers["X-Cache"] == "MISS"
+    assert models.await_count == 2
+
+    cleared = client.post("/api/cache/clear", json={"scope": "all"}, headers=headers)
+    assert cleared.status_code == 200
+    assert cleared.json["ai_models"] == 0

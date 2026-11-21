@@ -197,3 +197,52 @@ async def test_history_import_stores_previous_complete_day_and_deduplicates(gate
         assert len(store.messages(-100123, start, start + timedelta(days=1))) == 1
     finally:
         store.close()
+
+
+def test_dialogs_cache_avoids_stopping_service_and_populates_group_identify(gateway):
+    manager, client, control = gateway
+    client.is_user_authorized.return_value = True
+    client.get_dialogs.return_value = [
+        SimpleNamespace(id=-100123, name="缓存测试群", is_group=True, is_channel=False)
+    ]
+
+    first = manager.execute("dialogs", {}, "owner")
+    assert first == {"items": [{"id": -100123, "name": "缓存测试群"}]}
+    assert manager.consume_last_meta()[0] is False
+    assert [call.args[0] for call in control.call_args_list] == ["status", "stop", "start"]
+    control.reset_mock()
+
+    # Second dialogs call hits cache without touching service control or Telethon
+    second = manager.execute("dialogs", {}, "owner")
+    assert second == {"items": [{"id": -100123, "name": "缓存测试群"}]}
+    assert manager.consume_last_meta()[0] is True
+    control.assert_not_called()
+
+    # Group identify reuses entities populated from dialogs cache without stopping service
+    identified = manager.execute("identify", {"kind": "group", "ids": ["-100123"]}, "owner")
+    assert identified == {"items": [{"id": -100123, "name": "缓存测试群", "username": ""}]}
+    assert manager.consume_last_meta()[0] is True
+    control.assert_not_called()
+
+    # Explicit refresh=True bypasses cache and queries Telethon again
+    refreshed = manager.execute("dialogs", {"refresh": True}, "owner")
+    assert refreshed == {"items": [{"id": -100123, "name": "缓存测试群"}]}
+    assert manager.consume_last_meta()[0] is False
+    assert [call.args[0] for call in control.call_args_list] == ["status", "stop", "start"]
+
+    # Clearing cache drops all entries
+    stats = manager.clear_cache()
+    assert stats["dialogs"] == 0
+    assert stats["entities"] == 0
+
+
+async def test_resolve_skips_unnecessary_get_dialogs(gateway):
+    manager, client, _ = gateway
+    client.is_user_authorized.return_value = True
+    client.get_entity.return_value = User(
+        id=99, is_self=False, first_name="Fast", username="fastuser"
+    )
+
+    result = await manager.request("resolve", {"kind": "user", "reference": "@fastuser"}, "owner")
+    assert result["id"] == 99
+    client.get_dialogs.assert_not_awaited()

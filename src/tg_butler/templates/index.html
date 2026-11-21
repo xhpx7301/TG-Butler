@@ -1,62 +1,881 @@
 <!doctype html>
 <html lang="zh-CN">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>TG-Butler · 管理后台</title><link rel="stylesheet" href="/static/app.css">
-<script src="/static/app.js" defer></script></head>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>TG-Butler · 管理后台</title>
+  <link rel="stylesheet" href="/static/app.css?v={{ asset_versions.css }}">
+  <script src="/static/app.js?v={{ asset_versions.js }}" defer></script>
+</head>
 <body>
-<div id="login" class="login-shell">
-  <div class="login-card"><div class="login-copy"><div class="brand-mark">B</div><p class="eyebrow">TELEGRAM PERSONAL ASSISTANT</p>
-  <h1>让每一次群组变化，都及时被看见。</h1><p class="muted">集中管理 Telegram 群消息、每日摘要、通知机器人和自动签到，让个人工作台更清晰、更可靠。</p>
-  <ul><li>统一查看监控群组和关注用户</li><li>每日摘要与 AI 总结</li><li>签到任务与回复确认</li></ul></div><div class="login-form-panel"><h2>欢迎回来</h2><p class="muted">登录管理员账号，继续管理你的 TG-Butler。</p>
-  <form id="login-form"><label>管理员用户名<input name="username" autocomplete="username" required></label>
-  <label>管理员密码<input name="password" type="password" autocomplete="current-password" required></label>
-  <button>登录管理后台 →</button></form><p id="setup-help" class="hint">{% if docker_mode %}忘记管理员密码时，请在 Compose 项目目录执行：<code>docker compose exec tg-butler /opt/venv/bin/python -m tg_butler.admin account --root /var/lib/tg-butler</code>{% else %}忘记管理员密码时，请在服务器运行 bu → 1 网页后台 → 2 管理员账户重置。{% endif %}</p></div></div>
-</div>
-<div id="dashboard" hidden>
-<div id="nav-backdrop" class="nav-backdrop" hidden></div>
-<aside id="sidebar" aria-label="主导航">
-<div class="sidebar-heading"><a class="brand" href="/"><span class="brand-icon" aria-hidden="true">B</span><span>TG-Butler<small>你的 Telegram 管家</small></span></a><button id="menu-close" class="icon-button" aria-label="关闭导航"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div>
-<nav aria-label="管理页面"><div class="nav-group"><span class="nav-label">工作台</span><button data-page="overview" class="selected" aria-current="page">概览</button></div><div class="nav-group"><span class="nav-label">连接与配置</span><button data-page="telegram">Telegram 账号</button>
-<button data-page="lookup">查找群组与用户 ID</button><button data-page="groups">群组与关注用户</button>
-<button data-page="checkins">定时签到</button><button data-page="summary">日报与 AI</button></div><div class="nav-group"><span class="nav-label">系统</span><button data-page="settings">设置</button></div></nav>
-<div class="aside-bottom"><span id="logged-user"></span><button id="logout" class="ghost">退出登录</button><small class="sidebar-caption">群组监控 · 日报 · 自动签到</small></div></aside>
-<main id="main-content"><header><button id="menu-toggle" class="icon-button" aria-label="打开导航" aria-controls="sidebar" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16m4-11h4m-4 6h4"/></svg></button><div class="page-heading"><p class="eyebrow">YOUR TELEGRAM, ORGANIZED</p><h1 id="page-title">运行概览</h1><p id="page-summary" class="page-summary">每分钟查看监控、通知、日报和最近执行记录。</p></div>
-<div class="header-actions"><span id="service-badge" class="badge">加载中</span><button id="refresh" class="secondary">刷新</button></div></header>
-<div class="notice" id="global-notice">配置和凭据保存后，运行中的任务服务会自动重启并立即生效；已停止的服务会在下次启动时读取新配置。密钥不会回显。Telegram 登录与查群操作会短暂停止任务，结束后恢复。</div>
-<section data-section="overview">
-<div class="overview-stats">
-  <article class="metric-card metric-blue"><div class="metric-icon" aria-hidden="true">▦</div><div><p>监控群组</p><strong id="count-groups">0</strong><small>有选择地关注消息</small></div></article>
-  <article class="metric-card metric-teal"><div class="metric-icon" aria-hidden="true">⌁</div><div><p>签到任务</p><strong id="count-checkins">0</strong><small>发送与成功确认分别记录</small></div></article>
-  <article class="metric-card metric-amber"><div class="metric-icon" aria-hidden="true">◷</div><div><p>日报时间</p><strong id="summary-time">—</strong><small id="timezone-label"></small></div></article>
-  <article class="metric-card metric-violet"><div class="metric-icon" aria-hidden="true">●</div><div><p>任务服务</p><strong id="service-state-card">加载中</strong><small>{% if docker_mode %}容器内 Supervisor 管理{% else %}网页后台独立运行{% endif %}</small></div></article>
-</div>
-<div class="overview-columns">
-  <article class="service-panel"><div class="panel-heading"><div><h2>任务服务</h2><p class="muted">{% if docker_mode %}网页后台与监控任务由同一容器内的 Supervisor 管理，停止监控不会关闭本页面。{% else %}网页后台与任务服务独立运行，停止监控不会关闭本页面。{% endif %}</p></div><span id="service-panel-dot" class="status-dot off">离线</span></div><div class="service-actions"><button data-service="start">启动任务服务</button><button data-service="restart" class="secondary">重启任务服务</button><button data-service="stop" class="danger">停止任务服务</button><button data-service="logs" class="ghost">查看最近日志</button></div><pre id="service-output" hidden></pre>{% if docker_mode %}<div class="update-row"><div><b>Docker 更新项目</b><p>点击后查看宿主机更新命令，也可以在服务器输入 <code>bu</code> 选择“6. 更新项目”。</p></div><button id="update-project" data-docker="true" class="secondary">更新项目说明</button></div>{% else %}<div class="update-row"><div><b>保持 TG-Butler 最新</b><p>更新脚本与依赖，配置、凭据、会话和数据会保留；提交后页面将在 10 秒后自动刷新。</p></div><button id="update-project" class="secondary">更新 TG-Butler</button></div>{% endif %}</article>
-  <article class="quick-panel"><div class="panel-heading"><div><h2>快速入口</h2><p class="muted">从这里继续完成常用配置。</p></div></div><div class="quick-links"><button data-page="telegram"><span>◉</span><b>连接 Telegram 账号</b><small>应用凭据与账号登录</small></button><button data-page="groups"><span>⌘</span><b>选择监控群组</b><small>群组、成员和关注用户</small></button><button data-page="settings"><span>♢</span><b>测试通知机器人</b><small>确认提醒渠道可用</small></button><button data-page="checkins"><span>↯</span><b>配置定时签到</b><small>命令、时间和回复规则</small></button></div></article>
-</div>
-<article class="activity-panel"><div class="panel-heading"><div><h2>最近执行记录</h2><p class="muted">查看日报与签到任务最近一次的处理结果。</p></div><button data-page="summary" class="secondary compact-action">查看日报设置</button></div><div class="table-scroll"><table><thead><tr><th>日期</th><th>类型</th><th>任务 / 群组</th><th>结果</th></tr></thead><tbody id="runs"></tbody></table></div></article>
-</section>
-<section data-section="telegram" hidden>
-<article><div class="section-heading"><div><h2>Telegram 账号</h2><p class="muted">每个账号有独立登录会话；群组和签到任务可以分别分配。</p></div><button id="add-account" class="secondary">＋ 添加账号</button></div><div id="account-list" class="account-list"></div></article>
-<article><h2>账号应用凭据</h2><p class="muted">用于登录你的个人 Telegram 账号，读取已加入的群消息、发送签到命令。与通知机器人的 Token 不同。</p>
-<form id="application-form"><div class="grid"><label>API ID<input name="TG_API_ID" inputmode="numeric" required><small>登录 <a href="https://my.telegram.org" target="_blank" rel="noreferrer">my.telegram.org</a> → API development tools → 创建应用，复制数字 api_id。</small></label><label>API HASH<input name="TG_API_HASH" type="password" autocomplete="new-password"><small>与 API ID 在同一个页面获取的 api_hash。首次必填，已保存后留空保留。</small></label></div><button>保存应用凭据</button></form></article>
-<article><h2>登录 Telegram 账号</h2><p class="muted">先保存上方应用凭据。验证码由 Telegram 提供，可能发送到已登录的 Telegram 客户端。验证流程 5 分钟内有效。</p>
-<label>登录目标账号<select id="login-account"></select></label><div class="grid"><form id="send-code-form"><label>手机号<input name="phone" type="tel" placeholder="+8613800000000" required><small>包含国家区号；验证码和密码只用于所选账号。</small></label><button>获取验证码</button></form>
-<form id="verify-code-form"><label>Telegram 验证码<input name="code" autocomplete="one-time-code" required><small>在 Telegram 官方消息或短信中查看。</small></label><button class="secondary">验证并登录</button></form></div>
-<form id="password-form" hidden><label>两步验证密码<input name="password" type="password" autocomplete="off" required><small>仅在账号开启两步验证时需要，验证完成后不会保存到配置文件。</small></label><button>完成两步验证</button></form><p id="telegram-status" class="hint">手机号、验证码及两步验证密码只用于登录。请通过 SSH 隧道或 HTTPS 访问。</p></article>
-<article><h2>导入历史消息</h2><label>导入账号<select id="history-account"></select><small>使用所选账号访问群组并导入消息。</small></label><form id="history-form" class="inline-form"><label>群组数字 ID<input name="chat_id" placeholder="-1001234567890" required></label><label>导入完整自然日<input name="days" type="number" min="1" max="30" value="1" required></label><button class="secondary">导入历史消息</button></form><p class="hint">历史导入范围为最近几个完整自然日，不包含今天。默认导入前一天，适合生成测试日报；消息会按消息 ID 去重，最多扫描 5000 条。</p><p id="history-status" class="hint">群组 ID 请在“群组与关注用户”页查询。</p></article>
-</section>
-<section data-section="lookup" hidden><article><h2>查找群组与用户 ID</h2><p class="muted">输入公开群组链接或用户名，快速获取群组 ID；输入用户 @用户名获取用户 ID。</p><label>读取账号<select id="lookup-account"></select><small>群组、用户、成员查询及群组列表均使用所选账号。</small></label><div class="grid"><form id="group-resolve-form"><label>群组链接或用户名<input name="reference" placeholder="https://t.me/example 或 @example" required></label><input type="hidden" name="kind" value="group"><button class="secondary">查询群组 ID</button></form><form id="user-resolve-form"><label>用户 @用户名<input name="reference" placeholder="@username" required></label><input type="hidden" name="kind" value="user"><button class="secondary">查询用户 ID</button></form></div><div class="buttons group-list-actions"><button id="dialogs" class="secondary">读取账号群组列表</button></div><form id="members-form" class="inline-form"><label>群组数字 ID<input name="chat_id" placeholder="-1001234567890" required></label><button class="secondary">读取前 200 位成员</button></form><p class="hint">公开群组链接和用户名需要账号可以访问；私密邀请链接无法直接解析。成员可见范围由群权限决定，匿名发言无法识别隐藏的个人身份。</p><pre id="telegram-items" hidden></pre></article></section>
-<section data-section="groups" hidden><article><div class="section-heading"><div><h2>监控群组</h2><p class="muted">填写账号已加入的群组 ID，并选择关注谁的发言。</p></div><button id="add-group" class="secondary">＋ 添加群组</button></div><p class="hint">筛选开关关闭时，关注-日报机器人发送关注用户的每条消息；开启后，自定义机器人仅发送命中关键词、图片或链接规则的关注消息，并附上原消息。多个条件之间是“或”，关键词可选择任一或全部匹配。</p><div id="group-list"></div><button id="save-groups">保存群组设置</button></article></section>
-<section data-section="summary" hidden><article><h2>每日日报</h2><p class="muted">汇总前一天的本地消息。默认提供数量统计和消息摘录；配置 AI 后可生成话题总结。</p><form id="summary-form"><div class="grid"><label class="check"><span>启用日报</span><input name="enabled" type="checkbox"></label><label>发送时间<input name="at" type="time" required><small>按照运行设置中的时区，汇总前一个自然日。</small></label><label>AI 接口地址（可选）<input name="api_url" type="url" placeholder="https://服务商地址 或 /v1/chat/completions"><small>支持 OpenAI Responses 和 Chat Completions 格式。填写站点根地址时会自动尝试 /v1/responses 和 /v1/chat/completions。</small></label><label>模型名称（可选）<span class="field-action"><select id="summary-model-select" aria-label="从模型列表选择"><option value="">请先读取模型</option></select><button type="button" id="fetch-models" class="secondary">读取模型</button></span><input name="model" id="summary-model-manual" autocomplete="off" placeholder="也可手动填写模型名"><small>点击“读取模型”后从下拉框选择；没有模型列表时可手动填写。与接口地址同时填写；二者留空使用本地摘录。</small></label><label>AI 最多输入消息数<input name="max_messages" type="number" min="1" max="10000" required><small>仅选取最近的消息，日报会注明实际输入数量。</small></label><label>AI 最多输入字符数<input name="max_chars" type="number" min="1000" max="200000" required><small>限制一次摘要的数据量与成本。</small></label></div><div class="buttons"><button>保存日报设置</button><button type="button" id="test-ai" class="secondary">测试连接</button><button type="button" id="test-summary" class="secondary">发送测试日报</button></div></form></article><article><h2>AI 服务密钥</h2><form id="ai-form"><label>API Key（可选）<input name="SUMMARY_API_KEY" type="password" autocomplete="new-password"><small>在你选择的 AI 服务商控制台申请。不是 Telegram API HASH。留空保留，勾选下方选项可清除。</small></label><label class="check"><input name="clear_key" type="checkbox">清除已保存的 AI 密钥</label><button>保存 AI 密钥</button></form></article></section>
-<section data-section="checkins" hidden><article><div class="section-heading"><div><h2>定时签到</h2><p class="muted">按配置时区，每天发送一次指定命令。</p></div><button id="add-checkin" class="secondary">＋ 添加签到</button></div><p class="hint">群组 ID、签到机器人 ID 可在“Telegram 账号”页查询；命令与回复关键词请以群内机器人的帮助信息为准。同一任务名称每天只尝试一次，修改名称会被视为新任务。测试会真实发送签到命令，但不会占用当天正式签到次数。</p><div id="checkin-list"></div><button id="save-checkins">保存签到设置</button></article></section>
-<section data-section="settings" hidden>
-<article class="settings-runtime"><h2>运行设置</h2><form id="system-form"><div class="grid"><label>时区<input name="timezone" required><small>使用 IANA 时区，例如 Asia/Shanghai。决定签到时间与日报日期。</small></label><label>消息保留天数<input name="retention_days" type="number" min="1" max="3650" required><small>超过此天数的消息在启动及每天 03:30 清理。</small></label><label>实时通知队列容量<input name="queue_size" type="number" min="1" max="10000" required><small>消息过多时缓冲待发提醒；队列满可能丢失实时通知，已入库消息保留。</small></label></div><button>保存运行设置</button></form><p class="hint">{% if docker_mode %}Docker 部署默认监听 0.0.0.0:15678；HTTPS Cookie 请按 README 中的命令配置。{% else %}网页监听地址、端口和 HTTPS Cookie 选项请在 bu → 1 网页后台 → 3 监听设置 中管理。新安装默认监听 0.0.0.0:15678；公网访问请配置 HTTPS。{% endif %}</p></article>
-<article class="settings-admin"><h2>管理员账户</h2><p class="muted">当前为单管理员模式，网页与 {% if docker_mode %}Docker Compose{% else %}`bu`{% endif %} 管理同一账户。此账号仅用于后台登录，与 Telegram 账号独立。</p><form id="admin-form"><label>当前管理员密码<input name="current_password" type="password" autocomplete="current-password" required><small>{% if docker_mode %}忘记密码可在 Compose 项目目录执行管理员重置命令。{% else %}修改账号前验证身份。忘记密码可登录服务器，在 bu → 1 网页后台 → 2 管理员账户 重置。{% endif %}</small></label><div class="grid"><label>新用户名<input name="username" autocomplete="username" minlength="3" maxlength="64" required><small>3–64 位字母、数字或 _ . @ -</small></label><label>新密码<input name="password" type="password" autocomplete="new-password" minlength="12" maxlength="256" required><small>12–256 个字符。修改后所有网页登录会话失效。</small></label><label>确认新密码<input name="confirm_password" type="password" autocomplete="new-password" minlength="12" required><small>再输入一次，避免误填。</small></label></div><button>更新管理员并退出登录</button></form></article>
-<article class="settings-notifications"><h2>通知机器人</h2><p class="muted">关注-日报机器人发送每日日报、签到结果，以及筛选关闭时关注用户的全部消息；自定义机器人在筛选开启且规则命中时发送关注消息，并附上原消息。两个机器人都需要先向它发送 /start。</p><div class="grid"><form id="monitor-notification-form"><h3>关注-日报机器人</h3><label>Bot Token<input name="TG_MONITOR_BOT_TOKEN" type="password" autocomplete="new-password"><small>在 @BotFather 创建机器人，留空保留已保存的值。</small></label><label>接收通知的用户 ID<input name="TG_MONITOR_NOTIFY_CHAT_ID" inputmode="numeric" required><small>填写接收消息的数字用户 ID。</small></label><div class="buttons"><button>保存关注-日报机器人</button><button type="button" id="monitor-notify-test" class="secondary">测试关注-日报通知</button></div></form><form id="report-notification-form"><h3>自定义机器人</h3><label>Bot Token<input name="TG_REPORT_BOT_TOKEN" type="password" autocomplete="new-password"><small>仅接收筛选开启且命中关键词、链接或图片规则的关注消息，并复制原消息。</small></label><label>接收通知的用户 ID<input name="TG_REPORT_NOTIFY_CHAT_ID" inputmode="numeric" required><small>填写接收通知的数字用户 ID。</small></label><div class="buttons"><button>保存自定义机器人</button><button type="button" id="report-notify-test" class="secondary">测试自定义通知</button></div></form></div><p class="hint">要复制原消息（含图片、文件等），请将自定义机器人加入对应来源群组并确保它可以读取消息。升级旧版本时，原有 TG_BOT_TOKEN / TG_NOTIFY_CHAT_ID 会作为两个角色的回退配置；分开配置后即可分别使用。</p></article>
-<article class="backup-schedule"><h2>自动备份计划</h2><p class="muted">每日按运行设置中的时区将备份保存到服务器，最多保留最近 30 份。</p><form id="backup-schedule-form"><label class="check"><span>启用每日自动备份</span><input type="checkbox" name="enabled"></label><label>每日备份时间<input type="time" name="at" value="03:00" required></label><button>保存备份计划</button></form><p id="backup-next" class="hint">读取备份计划中…</p></article>
-<article class="backup-operations"><h2>备份与恢复</h2><p class="muted">导出备份到本地保存，或从备份恢复配置、通知凭据、Telegram 登录会话和消息记录。</p><div class="buttons"><button type="button" id="backup-create">立即创建备份</button><button type="button" id="backup-download" class="secondary">导出备份到本地</button><label class="file-button secondary" for="backup-file">选择备份并导入</label><input id="backup-file" type="file" accept=".gz,.tgz,.tar.gz,application/gzip" hidden></div><p class="hint">导出文件包含敏感凭据和账号会话，请妥善保管。导入仅接受 20 MB 以内的 TG-Butler .tar.gz 备份，导入前会自动备份当前数据；网页管理员账号与访问设置会保留。</p><h2 class="backup-list-heading">最近备份</h2><p class="muted">定时备份和手动备份保存在服务器 <code>{{ backup_dir }}/</code>；可以下载到本地或从文件恢复。</p><div id="backup-list" class="backup-list"></div></article>
-</section>
-<footer>TG-Butler · 私人 Telegram 工作台<span>凭据与账号会话存储于你的服务器</span></footer></main></div>
-<div id="toast" role="status" hidden></div>
-</body></html>
+  <div id="login" class="login-shell">
+    <div class="login-card">
+      <div class="login-copy">
+        <div class="brand-emblem" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 5 2 12.5l7 2.5 2.5 7L21 5Z"/>
+            <path d="M9 15 21 5"/>
+          </svg>
+        </div>
+        <p class="eyebrow">TELEGRAM PERSONAL CONSOLE</p>
+        <h1>让每一次群组变化，都清晰可控。</h1>
+        <p class="login-lead">集中管理你的 Telegram 群组监控、AI 每日摘要、双机器人通知分流与定时签到，全部运行在自己的服务器上。</p>
+        <ul class="login-features">
+          <li>
+            <span class="feature-check" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>
+            </span>
+            <span>多账号会话隔离，群组与关注用户按规则精准提醒</span>
+          </li>
+          <li>
+            <span class="feature-check" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>
+            </span>
+            <span>自动汇总每日群聊消息，支持接入任意兼容 OpenAI 的模型</span>
+          </li>
+          <li>
+            <span class="feature-check" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>
+            </span>
+            <span>内置查询缓存与定时签到确认，稳定省心少中断</span>
+          </li>
+        </ul>
+      </div>
+      <div class="login-form-panel">
+        <div class="login-mobile-brand">
+          <div class="brand-emblem small" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 5 2 12.5l7 2.5 2.5 7L21 5Z"/>
+              <path d="M9 15 21 5"/>
+            </svg>
+          </div>
+          <strong>TG-Butler</strong>
+        </div>
+        <h2>欢迎回来</h2>
+        <p class="muted">登录管理员账号，进入你的私人 Telegram 工作台。</p>
+        <form id="login-form">
+          <label>管理员用户名
+            <input name="username" autocomplete="username" placeholder="请输入用户名" required>
+          </label>
+          <label>管理员密码
+            <div class="password-field">
+              <input name="password" type="password" autocomplete="current-password" placeholder="请输入密码" required>
+              <button type="button" class="icon-btn password-toggle" aria-label="显示密码" data-password-toggle></button>
+            </div>
+          </label>
+          <button type="submit" class="btn-primary btn-block">登录管理后台</button>
+        </form>
+        <p id="setup-help" class="hint">{% if docker_mode %}忘记管理员密码时，请在 Compose 项目目录执行：<code>docker compose exec tg-butler /opt/venv/bin/python -m tg_butler.admin account --root /var/lib/tg-butler</code>{% else %}忘记管理员密码时，请在服务器运行 <code>bu</code> → 1 网页后台 → 2 管理员账户重置。{% endif %}</p>
+      </div>
+    </div>
+  </div>
+
+  <div id="dashboard" class="app-shell" hidden>
+    <div id="nav-backdrop" class="nav-backdrop" hidden></div>
+
+    <aside id="sidebar" class="sidebar" aria-label="主导航">
+      <div class="sidebar-heading">
+        <a class="brand" href="#overview">
+          <span class="brand-emblem small" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 5 2 12.5l7 2.5 2.5 7L21 5Z"/>
+              <path d="M9 15 21 5"/>
+            </svg>
+          </span>
+          <span class="brand-text">
+            <strong>TG-Butler</strong>
+            <small>私人 Telegram 管家</small>
+          </span>
+        </a>
+        <button id="menu-close" class="icon-btn" type="button" aria-label="关闭导航">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>
+        </button>
+      </div>
+
+      <nav class="sidebar-nav" aria-label="管理页面">
+        <div class="nav-group">
+          <span class="nav-label">工作台</span>
+          <button type="button" data-page="overview" class="nav-item selected" aria-current="page">
+            <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
+            <span>运行概览</span>
+          </button>
+        </div>
+
+        <div class="nav-group">
+          <span class="nav-label">连接与配置</span>
+          <button type="button" data-page="telegram" class="nav-item">
+            <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            <span>Telegram 账号</span>
+          </button>
+          <button type="button" data-page="lookup" class="nav-item">
+            <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+            <span>查找群组与 ID</span>
+          </button>
+          <button type="button" data-page="groups" class="nav-item">
+            <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            <span>监控群组</span>
+            <span class="nav-count" id="nav-count-groups">0</span>
+          </button>
+          <button type="button" data-page="checkins" class="nav-item">
+            <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 2v4M16 2v4M3 10h18"/><rect x="3" y="4" width="18" height="18" rx="2"/><path d="m9 16 2 2 4-4"/></svg>
+            <span>定时签到</span>
+            <span class="nav-count" id="nav-count-checkins">0</span>
+          </button>
+          <button type="button" data-page="summary" class="nav-item">
+            <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M8 13h8M8 17h5"/></svg>
+            <span>日报与 AI</span>
+          </button>
+        </div>
+
+        <div class="nav-group">
+          <span class="nav-label">系统</span>
+          <button type="button" data-page="settings" class="nav-item">
+            <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c.26.604.852.997 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+            <span>设置与缓存</span>
+          </button>
+        </div>
+      </nav>
+
+      <div class="aside-bottom">
+        <div class="user-card">
+          <span class="user-avatar" id="user-avatar">A</span>
+          <div class="user-meta">
+            <strong id="logged-user">管理员</strong>
+            <small>本地管理员会话</small>
+          </div>
+          <button id="theme-toggle" type="button" class="icon-btn" aria-label="切换明暗主题" title="切换浅色 / 深色主题"></button>
+        </div>
+        <button id="logout" type="button" class="btn-ghost btn-logout">退出登录</button>
+      </div>
+    </aside>
+
+    <main id="main-content" class="main-content">
+      <header class="topbar">
+        <div class="topbar-left">
+          <button id="menu-toggle" class="icon-btn" type="button" aria-label="打开导航" aria-controls="sidebar" aria-expanded="false">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+          </button>
+          <div class="page-heading">
+            <h1 id="page-title">运行概览</h1>
+            <p id="page-summary" class="page-summary">查看任务运行状态、监控配置就绪度与最近执行记录。</p>
+          </div>
+        </div>
+        <div class="header-actions">
+          <span id="sync-meta" class="sync-meta" hidden></span>
+          <span id="service-badge" class="status-pill off"><span class="pulse-dot"></span><span>加载中</span></span>
+          <button id="refresh" type="button" class="btn-secondary btn-icon-text">
+            <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>
+            <span>刷新</span>
+          </button>
+        </div>
+      </header>
+
+      <div class="page-container">
+        <div class="notice-banner" id="global-notice">
+          <svg class="notice-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/></svg>
+          <span>配置和凭据保存后，运行中的任务服务会自动重启生效；密钥永不回显。查询群组、成员和核对 ID 已启用服务端缓存，命中缓存时不会中断监控任务。</span>
+        </div>
+
+        <!-- OVERVIEW -->
+        <section data-section="overview" class="page-section">
+          <div id="readiness-strip" class="readiness-strip" hidden></div>
+
+          <div class="overview-stats">
+            <article class="metric-card">
+              <div class="metric-top">
+                <span class="metric-label">监控群组</span>
+                <span class="metric-icon tone-blue" aria-hidden="true">
+                  <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                </span>
+              </div>
+              <strong id="count-groups" class="metric-value">0</strong>
+              <small id="count-groups-sub">已启用 0 个监控群组</small>
+            </article>
+
+            <article class="metric-card">
+              <div class="metric-top">
+                <span class="metric-label">定时签到</span>
+                <span class="metric-icon tone-teal" aria-hidden="true">
+                  <svg viewBox="0 0 24 24"><path d="M8 2v4M16 2v4M3 10h18"/><rect x="3" y="4" width="18" height="18" rx="2"/><path d="m9 16 2 2 4-4"/></svg>
+                </span>
+              </div>
+              <strong id="count-checkins" class="metric-value">0</strong>
+              <small id="count-checkins-sub">已启用 0 个签到任务</small>
+            </article>
+
+            <article class="metric-card">
+              <div class="metric-top">
+                <span class="metric-label">每日日报</span>
+                <span class="metric-icon tone-amber" aria-hidden="true">
+                  <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+                </span>
+              </div>
+              <strong id="summary-time" class="metric-value">—</strong>
+              <small id="timezone-label">Asia/Shanghai</small>
+            </article>
+
+            <article class="metric-card">
+              <div class="metric-top">
+                <span class="metric-label">任务服务</span>
+                <span class="metric-icon tone-violet" aria-hidden="true">
+                  <svg viewBox="0 0 24 24"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+                </span>
+              </div>
+              <strong id="service-state-card" class="metric-value">加载中</strong>
+              <small>{% if docker_mode %}容器内 Supervisor 托管{% else %}独立后台进程运行{% endif %}</small>
+            </article>
+          </div>
+
+          <div class="overview-columns">
+            <article class="card service-panel">
+              <div class="panel-heading">
+                <div>
+                  <h2>任务服务控制</h2>
+                  <p class="muted">{% if docker_mode %}网页后台与监控任务由同一容器内的 Supervisor 管理，停止监控不会关闭本页面。{% else %}网页后台与任务服务独立运行，停止监控不会关闭本页面。{% endif %}</p>
+                </div>
+                <span id="service-panel-dot" class="status-pill off"><span class="pulse-dot"></span><span>离线</span></span>
+              </div>
+
+              <div class="service-actions">
+                <button type="button" data-service="start" class="btn-primary">启动服务</button>
+                <button type="button" data-service="restart" class="btn-secondary">重启服务</button>
+                <button type="button" data-service="stop" class="btn-danger-soft">停止服务</button>
+                <button type="button" data-service="logs" class="btn-ghost">查看最近日志</button>
+              </div>
+
+              <div id="service-output-wrap" class="terminal-wrap" hidden>
+                <div class="terminal-bar">
+                  <span>服务输出 / 最近日志</span>
+                  <div class="terminal-actions">
+                    <button type="button" id="copy-service-output" class="btn-mini">复制</button>
+                    <button type="button" id="close-service-output" class="btn-mini">收起</button>
+                  </div>
+                </div>
+                <pre id="service-output"></pre>
+              </div>
+
+              {% if docker_mode %}
+              <div class="update-row">
+                <div>
+                  <b>Docker 更新项目</b>
+                  <p>查看宿主机更新命令，或在服务器输入 <code>bu</code> 选择“6. 更新项目”。</p>
+                </div>
+                <button id="update-project" type="button" data-docker="true" class="btn-secondary">更新说明</button>
+              </div>
+              {% else %}
+              <div class="update-row">
+                <div>
+                  <b>保持 TG-Butler 最新</b>
+                  <p>更新代码与依赖，所有配置、会话和数据均保留；提交后约 10 秒自动刷新。</p>
+                </div>
+                <button id="update-project" type="button" class="btn-secondary">更新项目</button>
+              </div>
+              {% endif %}
+            </article>
+
+            <article class="card quick-panel">
+              <div class="panel-heading">
+                <div>
+                  <h2>快速入口</h2>
+                  <p class="muted">常用操作与向导直达。</p>
+                </div>
+              </div>
+              <div class="quick-links">
+                <button type="button" data-page="telegram" class="quick-tile">
+                  <span class="tile-icon tone-blue"><svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg></span>
+                  <b>Telegram 账号</b>
+                  <small>API 凭据、多账号与验证码登录</small>
+                </button>
+                <button type="button" data-page="lookup" class="quick-tile">
+                  <span class="tile-icon tone-teal"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></span>
+                  <b>查找群组与 ID</b>
+                  <small>带缓存拉取群列表并一键添加</small>
+                </button>
+                <button type="button" data-page="groups" class="quick-tile">
+                  <span class="tile-icon tone-violet"><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
+                  <b>监控群组</b>
+                  <small>关注用户与自定义筛选分流</small>
+                </button>
+                <button type="button" data-page="checkins" class="quick-tile">
+                  <span class="tile-icon tone-amber"><svg viewBox="0 0 24 24"><path d="M8 2v4M16 2v4M3 10h18"/><rect x="3" y="4" width="18" height="18" rx="2"/><path d="m9 16 2 2 4-4"/></svg></span>
+                  <b>定时签到</b>
+                  <small>每日命令、时间与回复匹配</small>
+                </button>
+              </div>
+            </article>
+          </div>
+
+          <article class="card activity-panel">
+            <div class="panel-heading">
+              <div>
+                <h2>最近执行记录</h2>
+                <p class="muted">展示最近 100 条日报与定时签到任务的处理状态。</p>
+              </div>
+              <div class="panel-controls">
+                <div class="segmented" id="runs-filter" role="tablist" aria-label="按类型筛选记录">
+                  <button type="button" data-runs-filter="all" class="is-active" role="tab" aria-selected="true">全部</button>
+                  <button type="button" data-runs-filter="checkin" role="tab" aria-selected="false">签到</button>
+                  <button type="button" data-runs-filter="summary" role="tab" aria-selected="false">日报</button>
+                </div>
+                <button type="button" data-page="summary" class="btn-secondary btn-sm">日报设置</button>
+              </div>
+            </div>
+            <div class="table-scroll">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>日期</th>
+                    <th>类型</th>
+                    <th>任务 / 群组</th>
+                    <th>状态</th>
+                    <th>说明</th>
+                  </tr>
+                </thead>
+                <tbody id="runs"></tbody>
+              </table>
+            </div>
+          </article>
+        </section>
+
+        <!-- TELEGRAM ACCOUNTS -->
+        <section data-section="telegram" class="page-section two-col" hidden>
+          <article class="card span-2">
+            <div class="panel-heading">
+              <div>
+                <h2>Telegram 账号列表</h2>
+                <p class="muted">每个账号维护独立的 Telethon 登录会话，可为不同群组和签到任务分别指派负责账号。</p>
+              </div>
+              <button id="add-account" type="button" class="btn-primary btn-sm">＋ 添加账号</button>
+            </div>
+            <div id="account-list" class="account-list"></div>
+          </article>
+
+          <article class="card">
+            <div class="panel-heading">
+              <div>
+                <h2>应用凭据（API ID / HASH）</h2>
+                <p class="muted">用于个人账号登录，读取已加入群消息与发送签到命令（与通知机器人 Token 不同）。</p>
+              </div>
+            </div>
+            <form id="application-form" class="form-stack">
+              <div class="form-grid">
+                <label>API ID
+                  <input name="TG_API_ID" inputmode="numeric" placeholder="例如 12345678" required>
+                  <small>访问 <a href="https://my.telegram.org" target="_blank" rel="noreferrer">my.telegram.org</a> → API development tools 获取。</small>
+                </label>
+                <label>API HASH
+                  <div class="password-field">
+                    <input name="TG_API_HASH" type="password" autocomplete="new-password">
+                    <button type="button" class="icon-btn password-toggle" aria-label="显示密码" data-password-toggle></button>
+                  </div>
+                  <small>首次必填；已保存后留空即可保留原值。</small>
+                </label>
+              </div>
+              <div class="form-actions">
+                <button type="submit" class="btn-primary">保存应用凭据</button>
+              </div>
+            </form>
+          </article>
+
+          <article class="card">
+            <div class="panel-heading">
+              <div>
+                <h2>登录 Telegram 账号</h2>
+                <p class="muted">先保存应用凭据，再按步骤完成验证码验证。单次验证流程 5 分钟内有效。</p>
+              </div>
+              <span id="login-countdown" class="cache-pill" hidden></span>
+            </div>
+
+            <div class="form-stack">
+              <label>选择目标账号
+                <select id="login-account"></select>
+              </label>
+
+              <div class="step-grid">
+                <form id="send-code-form" class="step-box">
+                  <div class="step-header"><span class="step-num">1</span><strong>发送验证码</strong></div>
+                  <label>手机号（含国际区号）
+                    <input name="phone" type="tel" placeholder="+8613800000000" required>
+                  </label>
+                  <button type="submit" class="btn-primary btn-sm">获取验证码</button>
+                </form>
+
+                <form id="verify-code-form" class="step-box">
+                  <div class="step-header"><span class="step-num">2</span><strong>提交验证码</strong></div>
+                  <label>Telegram 验证码
+                    <input name="code" autocomplete="one-time-code" placeholder="5 位数字验证码" required>
+                  </label>
+                  <button type="submit" class="btn-secondary btn-sm">验证并登录</button>
+                </form>
+              </div>
+
+              <form id="password-form" class="step-box step-2fa" hidden>
+                <div class="step-header"><span class="step-num">3</span><strong>两步验证密码</strong></div>
+                <label>两步验证密码（不会保存到配置文件）
+                  <div class="password-field">
+                    <input name="password" type="password" autocomplete="off" required>
+                    <button type="button" class="icon-btn password-toggle" aria-label="显示密码" data-password-toggle></button>
+                  </div>
+                </label>
+                <button type="submit" class="btn-primary btn-sm">完成两步验证</button>
+              </form>
+
+              <p id="telegram-status" class="hint">手机号、验证码及两步验证密码仅用于本次登录。公网访问请务必通过 HTTPS 或 SSH 隧道。</p>
+            </div>
+          </article>
+
+          <article class="card span-2">
+            <div class="panel-heading">
+              <div>
+                <h2>导入历史消息</h2>
+                <p class="muted">将最近若干完整自然日（不含今天）的群消息导入本地数据库，按消息 ID 自动去重，单次最多扫描 5000 条。</p>
+              </div>
+              <button type="button" data-page="lookup" class="btn-ghost btn-sm">去查找群组 ID →</button>
+            </div>
+            <form id="history-form" class="form-inline-grid">
+              <label>导入账号
+                <select id="history-account"></select>
+              </label>
+              <label>群组数字 ID
+                <input name="chat_id" list="cached-dialogs-list" placeholder="-1001234567890" required>
+              </label>
+              <label>导入自然日数（1–30）
+                <input name="days" type="number" min="1" max="30" value="1" required>
+              </label>
+              <div class="inline-btn-wrap">
+                <button type="submit" class="btn-secondary">开始导入</button>
+              </div>
+            </form>
+            <p id="history-status" class="hint">默认导入前一天，适合立即生成测试日报。群组 ID 可在「查找群组与 ID」页拉取，已缓存的群组会自动出现在输入框下拉建议中。</p>
+          </article>
+        </section>
+
+        <!-- LOOKUP WORKBENCH -->
+        <section data-section="lookup" class="page-section" hidden>
+          <article class="card">
+            <div class="panel-heading">
+              <div>
+                <h2>账号群组与成员工作台</h2>
+                <p class="muted">读取群组列表、成员或解析链接/用户名。结果自动缓存 10–15 分钟，重复查看或核对 ID 时不中断任务服务。</p>
+              </div>
+              <span id="lookup-cache-badge" class="cache-pill" hidden></span>
+            </div>
+
+            <div class="lookup-toolbar">
+              <label class="toolbar-select">读取账号
+                <select id="lookup-account"></select>
+              </label>
+              <div class="toolbar-actions">
+                <button id="dialogs" type="button" class="btn-primary">读取群组列表</button>
+                <button id="dialogs-refresh" type="button" class="btn-secondary" title="跳过缓存，重新连接 Telegram 获取最新群组">强制实时刷新</button>
+              </div>
+            </div>
+
+            <div class="lookup-forms">
+              <form id="group-resolve-form" class="sub-card">
+                <label>公开群组链接或 @用户名
+                  <div class="field-action">
+                    <input name="reference" placeholder="https://t.me/example 或 @example" required>
+                    <input type="hidden" name="kind" value="group">
+                    <button type="submit" class="btn-secondary">查群组 ID</button>
+                  </div>
+                </label>
+              </form>
+
+              <form id="user-resolve-form" class="sub-card">
+                <label>用户 @用户名
+                  <div class="field-action">
+                    <input name="reference" placeholder="@username" required>
+                    <input type="hidden" name="kind" value="user">
+                    <button type="submit" class="btn-secondary">查用户 ID</button>
+                  </div>
+                </label>
+              </form>
+
+              <form id="members-form" class="sub-card span-2">
+                <label>读取群组前 200 位成员
+                  <div class="field-action">
+                    <input name="chat_id" list="cached-dialogs-list" placeholder="输入群组数字 ID，例如 -1001234567890" required>
+                    <button type="submit" class="btn-secondary">读取成员</button>
+                  </div>
+                </label>
+              </form>
+            </div>
+
+            <p class="hint">公开群组链接和用户名需账号可访问，私密邀请链接无法直接解析。点击下方结果行右侧按钮，可一键复制 ID、添加到监控群组或创建定时签到。</p>
+
+            <div id="lookup-results-panel" class="results-panel" hidden>
+              <div class="results-header">
+                <div class="results-title-group">
+                  <h3 id="lookup-results-title">查询结果</h3>
+                  <span id="lookup-results-count" class="count-pill">0</span>
+                </div>
+                <div class="results-tools">
+                  <input id="lookup-filter" type="search" class="search-input" placeholder="筛选名称、ID 或 @用户名…">
+                  <button id="lookup-refresh-current" type="button" class="btn-secondary btn-sm">强制刷新当前</button>
+                  <button id="lookup-clear-view" type="button" class="btn-ghost btn-sm">清空视图</button>
+                </div>
+              </div>
+              <div id="lookup-list" class="lookup-list"></div>
+            </div>
+            <pre id="telegram-items" hidden></pre>
+          </article>
+        </section>
+
+        <!-- GROUPS -->
+        <section data-section="groups" class="page-section" hidden>
+          <article class="card">
+            <div class="panel-heading">
+              <div>
+                <h2>监控群组</h2>
+                <p class="muted">管理已加入的群组监控、关注用户及双机器人通知分流策略。</p>
+              </div>
+              <div class="panel-controls">
+                <input id="group-search" type="search" class="search-input" placeholder="搜索群组名或 ID…">
+                <button id="toggle-all-groups" type="button" class="btn-ghost btn-sm">全部折叠</button>
+                <button id="add-group" type="button" class="btn-primary btn-sm">＋ 添加群组</button>
+              </div>
+            </div>
+
+            <p class="hint">筛选关闭时，「关注-日报机器人」推送关注用户的每条发言；开启后，「自定义机器人」仅推送命中关键词、图片或链接规则的消息并附带原消息（多条件为“或”关系）。</p>
+
+            <div id="group-list" class="record-list"></div>
+
+            <div class="section-footer-actions">
+              <button id="save-groups" type="button" class="btn-primary">保存群组设置</button>
+            </div>
+          </article>
+        </section>
+
+        <!-- CHECKINS -->
+        <section data-section="checkins" class="page-section" hidden>
+          <article class="card">
+            <div class="panel-heading">
+              <div>
+                <h2>定时签到</h2>
+                <p class="muted">按运行设置中的时区每天发送一次签到命令，并可选监听群内机器人回复进行成功确认。</p>
+              </div>
+              <div class="panel-controls">
+                <input id="checkin-search" type="search" class="search-input" placeholder="搜索任务名或群 ID…">
+                <button id="toggle-all-checkins" type="button" class="btn-ghost btn-sm">全部折叠</button>
+                <button id="add-checkin" type="button" class="btn-primary btn-sm">＋ 添加签到</button>
+              </div>
+            </div>
+
+            <p class="hint">群组 ID 与回复机器人 ID 可在「查找群组与 ID」页查询。同一任务名称每天仅执行一次，修改名称会视为新任务；测试签到真实发送命令，但不占用当天正式签到次数。</p>
+
+            <div id="checkin-list" class="record-list"></div>
+
+            <div class="section-footer-actions">
+              <button id="save-checkins" type="button" class="btn-primary">保存签到设置</button>
+            </div>
+          </article>
+        </section>
+
+        <!-- SUMMARY & AI -->
+        <section data-section="summary" class="page-section two-col" hidden>
+          <article class="card span-2">
+            <div class="panel-heading">
+              <div>
+                <h2>每日日报与 AI 摘要</h2>
+                <p class="muted">汇总前一自然日的本地群聊消息。默认输出数量统计与摘录；配置兼容 OpenAI 的接口后自动生成结构化话题总结。</p>
+              </div>
+              <span id="ai-models-cache-badge" class="cache-pill" hidden></span>
+            </div>
+
+            <form id="summary-form" class="form-stack">
+              <div class="form-grid">
+                <label class="check">
+                  <span>启用每日日报</span>
+                  <input name="enabled" type="checkbox">
+                </label>
+                <label>发送时间
+                  <input name="at" type="time" required>
+                  <small>按运行设置中的时区，汇总前一个完整自然日。</small>
+                </label>
+                <label class="span-2">AI 接口地址（可选）
+                  <input name="api_url" type="url" placeholder="https://服务商地址 或 /v1/chat/completions">
+                  <small>支持 OpenAI Responses 与 Chat Completions 格式；填写站点根地址会自动尝试标准路径。</small>
+                </label>
+                <label class="span-2">模型名称（可选）
+                  <div class="field-action">
+                    <select id="summary-model-select" aria-label="从模型列表选择">
+                      <option value="">请先读取模型</option>
+                    </select>
+                    <button type="button" id="fetch-models" class="btn-secondary">读取模型</button>
+                    <button type="button" id="refresh-models" class="btn-ghost" title="跳过缓存强制重新拉取模型列表">强制刷新</button>
+                  </div>
+                  <input name="model" id="summary-model-manual" autocomplete="off" placeholder="也可手动填写模型名，例如 gpt-5.5 / deepseek-chat">
+                  <small>读取后的模型列表自动缓存，切换页面或保存设置不会丢失。与接口地址同时填写，留空则使用本地摘录。</small>
+                </label>
+                <label>AI 最多输入消息数
+                  <input name="max_messages" type="number" min="1" max="10000" required>
+                  <small>仅选取最近的消息，日报中会注明实际输入条数。</small>
+                </label>
+                <label>AI 最多输入字符数
+                  <input name="max_chars" type="number" min="1000" max="200000" required>
+                  <small>限制单次摘要上下文体积与调用成本。</small>
+                </label>
+              </div>
+
+              <div class="form-actions">
+                <button type="submit" class="btn-primary">保存日报设置</button>
+                <button type="button" id="test-ai" class="btn-secondary">测试 AI 连接</button>
+                <button type="button" id="test-summary" class="btn-secondary">发送测试日报</button>
+              </div>
+            </form>
+          </article>
+
+          <article class="card span-2">
+            <div class="panel-heading">
+              <div>
+                <h2>AI 服务密钥</h2>
+                <p class="muted">仅存储在服务器 <code>.env</code> 文件中，永不回传至浏览器。</p>
+              </div>
+            </div>
+            <form id="ai-form" class="form-stack">
+              <div class="form-grid">
+                <label>API Key（可选）
+                  <div class="password-field">
+                    <input name="SUMMARY_API_KEY" type="password" autocomplete="new-password">
+                    <button type="button" class="icon-btn password-toggle" aria-label="显示密码" data-password-toggle></button>
+                  </div>
+                  <small>在你选择的 AI 服务商控制台申请；留空保留已保存密钥。</small>
+                </label>
+                <label class="check">
+                  <span>清除已保存的 AI 密钥</span>
+                  <input name="clear_key" type="checkbox">
+                </label>
+              </div>
+              <div class="form-actions">
+                <button type="submit" class="btn-primary">保存 AI 密钥</button>
+              </div>
+            </form>
+          </article>
+        </section>
+
+        <!-- SETTINGS -->
+        <section data-section="settings" class="page-section two-col" hidden>
+          <article class="card settings-runtime">
+            <div class="panel-heading">
+              <div>
+                <h2>运行设置</h2>
+                <p class="muted">决定签到调度时间、日报日期边界与消息留存周期。</p>
+              </div>
+            </div>
+            <form id="system-form" class="form-stack">
+              <div class="form-grid">
+                <label>时区（IANA）
+                  <input name="timezone" placeholder="Asia/Shanghai" required>
+                  <small>例如 Asia/Shanghai、UTC、America/New_York。</small>
+                </label>
+                <label>消息保留天数
+                  <input name="retention_days" type="number" min="1" max="3650" required>
+                  <small>超期消息在启动及每日 03:30 自动清理。</small>
+                </label>
+                <label class="span-2">实时通知队列容量
+                  <input name="queue_size" type="number" min="1" max="10000" required>
+                  <small>突发消息过多时用于缓冲待发提醒；已入库消息不会丢失。</small>
+                </label>
+              </div>
+              <div class="form-actions">
+                <button type="submit" class="btn-primary">保存运行设置</button>
+              </div>
+            </form>
+            <p class="hint">{% if docker_mode %}Docker 部署默认监听 0.0.0.0:15678；HTTPS Cookie 请按 README 中的命令配置。{% else %}网页监听地址、端口与 HTTPS Cookie 请在 <code>bu</code> → 1 网页后台 → 3 监听设置 中管理。公网访问请配置 HTTPS。{% endif %}</p>
+          </article>
+
+          <article class="card settings-admin">
+            <div class="panel-heading">
+              <div>
+                <h2>管理员账户</h2>
+                <p class="muted">单管理员模式，与 {% if docker_mode %}Docker Compose{% else %}<code>bu</code>{% endif %} 共用同一账户。修改后所有网页会话立即失效。</p>
+              </div>
+            </div>
+            <form id="admin-form" class="form-stack">
+              <label>当前管理员密码
+                <div class="password-field">
+                  <input name="current_password" type="password" autocomplete="current-password" required>
+                  <button type="button" class="icon-btn password-toggle" aria-label="显示密码" data-password-toggle></button>
+                </div>
+              </label>
+              <div class="form-grid">
+                <label>新用户名
+                  <input name="username" autocomplete="username" minlength="3" maxlength="64" required>
+                  <small>3–64 位字母、数字或 _ . @ -</small>
+                </label>
+                <label>新密码
+                  <div class="password-field">
+                    <input name="password" type="password" autocomplete="new-password" minlength="12" maxlength="256" required>
+                    <button type="button" class="icon-btn password-toggle" aria-label="显示密码" data-password-toggle></button>
+                  </div>
+                  <small>至少 12 个字符。</small>
+                </label>
+                <label class="span-2">确认新密码
+                  <div class="password-field">
+                    <input name="confirm_password" type="password" autocomplete="new-password" minlength="12" required>
+                    <button type="button" class="icon-btn password-toggle" aria-label="显示密码" data-password-toggle></button>
+                  </div>
+                </label>
+              </div>
+              <div class="form-actions">
+                <button type="submit" class="btn-primary">更新管理员并重新登录</button>
+              </div>
+            </form>
+          </article>
+
+          <article class="card settings-notifications span-2">
+            <div class="panel-heading">
+              <div>
+                <h2>通知机器人</h2>
+                <p class="muted">「关注-日报机器人」负责日报、签到结果及普通关注消息；「自定义机器人」负责筛选命中的消息并复制原消息。使用前请先向两个机器人发送 /start。</p>
+              </div>
+            </div>
+            <div class="bot-grid">
+              <form id="monitor-notification-form" class="sub-card form-stack">
+                <h3>关注-日报机器人</h3>
+                <label>Bot Token
+                  <div class="password-field">
+                    <input name="TG_MONITOR_BOT_TOKEN" type="password" autocomplete="new-password">
+                    <button type="button" class="icon-btn password-toggle" aria-label="显示密码" data-password-toggle></button>
+                  </div>
+                  <small>在 @BotFather 创建，留空保留已保存的值。</small>
+                </label>
+                <label>接收通知的用户 ID
+                  <input name="TG_MONITOR_NOTIFY_CHAT_ID" inputmode="numeric" required>
+                  <small>填写接收消息的数字用户 ID。</small>
+                </label>
+                <div class="form-actions">
+                  <button type="submit" class="btn-primary btn-sm">保存配置</button>
+                  <button type="button" id="monitor-notify-test" class="btn-secondary btn-sm">发送测试</button>
+                </div>
+              </form>
+
+              <form id="report-notification-form" class="sub-card form-stack">
+                <h3>自定义机器人</h3>
+                <label>Bot Token
+                  <div class="password-field">
+                    <input name="TG_REPORT_BOT_TOKEN" type="password" autocomplete="new-password">
+                    <button type="button" class="icon-btn password-toggle" aria-label="显示密码" data-password-toggle></button>
+                  </div>
+                  <small>接收命中关键词、图片或链接筛选的关注消息并附原消息。</small>
+                </label>
+                <label>接收通知的用户 ID
+                  <input name="TG_REPORT_NOTIFY_CHAT_ID" inputmode="numeric" required>
+                  <small>填写接收消息的数字用户 ID。</small>
+                </label>
+                <div class="form-actions">
+                  <button type="submit" class="btn-primary btn-sm">保存配置</button>
+                  <button type="button" id="report-notify-test" class="btn-secondary btn-sm">发送测试</button>
+                </div>
+              </form>
+            </div>
+            <p class="hint">要复制来源群内的原消息（含图片/文件），请将自定义机器人拉入目标群组并赋予读取消息权限。旧版 <code>TG_BOT_TOKEN</code> 会自动作为两个角色的回退。</p>
+          </article>
+
+          <article class="card backup-schedule">
+            <div class="panel-heading">
+              <div>
+                <h2>自动备份计划</h2>
+                <p class="muted">按运行设置中的时区每日备份到服务器，最多保留最近 30 份。</p>
+              </div>
+            </div>
+            <form id="backup-schedule-form" class="form-stack">
+              <div class="form-grid">
+                <label class="check">
+                  <span>启用每日自动备份</span>
+                  <input type="checkbox" name="enabled">
+                </label>
+                <label>每日备份时间
+                  <input type="time" name="at" value="03:00" required>
+                </label>
+              </div>
+              <div class="form-actions">
+                <button type="submit" class="btn-primary">保存备份计划</button>
+              </div>
+            </form>
+            <p id="backup-next" class="hint">读取备份计划中…</p>
+          </article>
+
+          <article class="card settings-cache">
+            <div class="panel-heading">
+              <div>
+                <h2>查询与模型缓存</h2>
+                <p class="muted">Telegram 群组/成员/实体与 AI 模型列表在内存中按 TTL 缓存，命中时免停服秒级响应。</p>
+              </div>
+              <button type="button" id="cache-refresh-stats" class="btn-ghost btn-sm">刷新统计</button>
+            </div>
+            <div class="cache-stats-grid" id="cache-stats-grid">
+              <div class="cache-stat"><span class="muted">群组列表缓存</span><strong id="cache-stat-dialogs">0</strong></div>
+              <div class="cache-stat"><span class="muted">群成员缓存</span><strong id="cache-stat-members">0</strong></div>
+              <div class="cache-stat"><span class="muted">已解析实体</span><strong id="cache-stat-entities">0</strong></div>
+              <div class="cache-stat"><span class="muted">AI 模型缓存</span><strong id="cache-stat-ai">0</strong></div>
+            </div>
+            <div class="form-actions">
+              <button type="button" id="cache-clear-telegram" class="btn-secondary btn-sm">清空 Telegram 缓存</button>
+              <button type="button" id="cache-clear-all" class="btn-danger-soft btn-sm">清空全部缓存（含浏览器）</button>
+            </div>
+            <p class="hint">凭据更新、账号重新登录或导入备份时会自动清空相关缓存。静态资源已启用内容指纹强缓存，版本升级自动失效。</p>
+          </article>
+
+          <article class="card backup-operations span-2">
+            <div class="panel-heading">
+              <div>
+                <h2>备份与恢复</h2>
+                <p class="muted">导出或恢复配置、凭据、Telegram 登录会话与消息记录。服务器存储目录：<code>{{ backup_dir }}/</code></p>
+              </div>
+            </div>
+            <div class="form-actions">
+              <button type="button" id="backup-create" class="btn-primary">立即创建备份</button>
+              <button type="button" id="backup-download" class="btn-secondary">导出最新备份到本地</button>
+              <label class="file-button" for="backup-file">选择备份并导入</label>
+              <input id="backup-file" type="file" accept=".gz,.tgz,.tar.gz,application/gzip" hidden>
+            </div>
+            <p class="hint">导出文件包含敏感凭据与账号会话，请妥善保管。导入支持 20 MB 以内的 <code>.tar.gz</code> 备份，导入前会自动备份当前数据并保留管理员账号与访问设置。</p>
+            <h3 class="sub-heading">最近备份</h3>
+            <div id="backup-list" class="backup-list"></div>
+          </article>
+        </section>
+
+        <footer class="app-footer">
+          <span>TG-Butler · 私人 Telegram 工作台</span>
+          <span>所有凭据与会话均仅存于你的服务器</span>
+        </footer>
+      </div>
+    </main>
+  </div>
+
+  <!-- Sticky unsaved bar -->
+  <div id="dirty-bar" class="dirty-bar" hidden role="region" aria-live="polite">
+    <div class="dirty-bar-inner">
+      <span class="dirty-dot"></span>
+      <span id="dirty-message">当前页面有未保存的更改</span>
+      <div class="dirty-actions">
+        <button type="button" id="dirty-discard" class="btn-ghost btn-sm">放弃更改</button>
+        <button type="button" id="dirty-save" class="btn-primary btn-sm">立即保存 (Ctrl+S)</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Global accessible modal -->
+  <div id="modal-backdrop" class="modal-backdrop" hidden>
+    <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <div class="modal-header">
+        <h3 id="modal-title">确认操作</h3>
+        <button type="button" id="modal-close" class="icon-btn" aria-label="关闭弹窗">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>
+        </button>
+      </div>
+      <div class="modal-body" id="modal-body"></div>
+      <div class="modal-footer" id="modal-footer"></div>
+    </div>
+  </div>
+
+  <!-- Datalist populated from cached dialogs -->
+  <datalist id="cached-dialogs-list"></datalist>
+
+  <!-- Toast notifications -->
+  <div id="toast-stack" class="toast-stack" aria-live="polite" aria-atomic="false"></div>
+</body>
+</html>

@@ -5,6 +5,8 @@ import hashlib
 import os
 import secrets
 import subprocess
+import threading
+import time
 from datetime import datetime, timedelta
 from functools import wraps
 from pathlib import Path
@@ -15,7 +17,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from dotenv import dotenv_values
 from filelock import Timeout
-from flask import Flask, jsonify, render_template, request, send_file, session
+from flask import Flask, jsonify, make_response, render_template, request, send_file, session
 from pydantic import ValidationError
 from waitress import serve
 
@@ -25,6 +27,9 @@ from tg_butler.menu import configuration_lock, save_credentials, save_settings
 from tg_butler.store import Store
 from tg_butler.summary import check_connection, list_models, send_test_daily
 from tg_butler.web_telegram import TelegramGateway
+
+AI_MODELS_CACHE_TTL = 900.0
+MAX_AI_MODELS_CACHE = 32
 
 SECRET_FIELDS = {
     "TG_API_HASH",
@@ -85,6 +90,37 @@ def create_app(config: Path, *, control=system_control) -> Flask:
     gateway = TelegramGateway(config, control)
     app.extensions["admin_store"] = admin
     app.extensions["telegram_gateway"] = gateway
+
+    ai_cache_lock = threading.Lock()
+    ai_models_cache: dict[tuple[str, str], tuple[float, float, list[str]]] = {}
+
+    def prune_ai_cache_locked(now: float) -> None:
+        expired = [k for k, v in ai_models_cache.items() if now - v[0] >= AI_MODELS_CACHE_TTL]
+        for key in expired:
+            ai_models_cache.pop(key, None)
+
+    def clear_ai_cache() -> None:
+        with ai_cache_lock:
+            ai_models_cache.clear()
+
+    def ai_cache_count() -> int:
+        with ai_cache_lock:
+            prune_ai_cache_locked(time.monotonic())
+            return len(ai_models_cache)
+
+    static_root = Path(__file__).resolve().parent / "static"
+
+    def asset_version(filename: str) -> str:
+        target = static_root / filename
+        if not target.is_file():
+            return "1"
+        return hashlib.sha256(target.read_bytes()).hexdigest()[:12]
+
+    asset_versions = {
+        "css": asset_version("app.css"),
+        "js": asset_version("app.js"),
+    }
+
     from tg_butler.backup import backup_dir, create_backup, read_schedule
 
     backup_scheduler = BackgroundScheduler(timezone="UTC")
@@ -143,9 +179,17 @@ def create_app(config: Path, *, control=system_control) -> Flask:
 
     @app.after_request
     def headers(response):
+        if request.path.startswith("/static/"):
+            cache_control = (
+                "public, max-age=31536000, immutable"
+                if request.args.get("v")
+                else "public, max-age=3600, must-revalidate"
+            )
+        else:
+            cache_control = "no-store"
         response.headers.update(
             {
-                "Cache-Control": "no-store",
+                "Cache-Control": cache_control,
                 "X-Content-Type-Options": "nosniff",
                 "X-Frame-Options": "DENY",
                 "Referrer-Policy": "no-referrer",
@@ -182,6 +226,7 @@ def create_app(config: Path, *, control=system_control) -> Flask:
             "index.html",
             backup_dir=backup_dir(root),
             docker_mode=os.environ.get("TG_BUTLER_CONTROL_MODE") == "supervisor",
+            asset_versions=asset_versions,
         )
 
     @app.get("/api/session")
@@ -333,6 +378,10 @@ def create_app(config: Path, *, control=system_control) -> Flask:
             if section == "ai" and supplied.get("clear_key") is True:
                 values["SUMMARY_API_KEY"] = ""
             save_credentials(root / ".env", values, section, locked=True)
+        if section == "application":
+            gateway.clear_cache()
+        elif section == "ai":
+            clear_ai_cache()
         return jsonify(message="凭据已保存。" + apply_saved_changes() + "密钥不会回传至浏览器。")
 
     @app.post("/api/service/<action>")
@@ -438,6 +487,8 @@ def create_app(config: Path, *, control=system_control) -> Flask:
         finally:
             path.unlink(missing_ok=True)
         configure_backup_job(read_schedule(root))
+        gateway.clear_cache()
+        clear_ai_cache()
         return jsonify(message="备份已导入并恢复。恢复后的监控服务已重新启动，请刷新页面。")
 
     def ai_request_values(body: dict, *, require_model: bool = True) -> tuple[str, str, str]:
@@ -456,8 +507,33 @@ def create_app(config: Path, *, control=system_control) -> Flask:
     def ai_models():
         import asyncio
 
-        api_url, _, api_key = ai_request_values(request.get_json() or {}, require_model=False)
-        return jsonify(models=asyncio.run(list_models(api_url, api_key)))
+        body = request.get_json() or {}
+        refresh = bool(body.get("refresh"))
+        api_url, _, api_key = ai_request_values(body, require_model=False)
+        key_hash = hashlib.sha256(api_key.encode("utf-8")).hexdigest()
+        cache_key = (api_url, key_hash)
+        now = time.monotonic()
+        if not refresh:
+            with ai_cache_lock:
+                prune_ai_cache_locked(now)
+                entry = ai_models_cache.get(cache_key)
+                if entry is not None:
+                    response = make_response(jsonify(models=list(entry[2])))
+                    response.headers["X-Cache"] = "HIT"
+                    response.headers["X-Cache-At"] = str(int(entry[1]))
+                    return response
+        models = asyncio.run(list_models(api_url, api_key))
+        wall = time.time()
+        with ai_cache_lock:
+            prune_ai_cache_locked(time.monotonic())
+            if len(ai_models_cache) >= MAX_AI_MODELS_CACHE:
+                oldest_key = min(ai_models_cache.items(), key=lambda item: item[1][0])[0]
+                ai_models_cache.pop(oldest_key, None)
+            ai_models_cache[cache_key] = (time.monotonic(), wall, list(models))
+        response = make_response(jsonify(models=models))
+        response.headers["X-Cache"] = "MISS"
+        response.headers["X-Cache-At"] = str(int(wall))
+        return response
 
     @app.post("/api/ai/test")
     @protected
@@ -482,7 +558,41 @@ def create_app(config: Path, *, control=system_control) -> Flask:
             "history",
         }:
             raise ValueError("无效 Telegram 操作")
-        return jsonify(gateway.execute(action, request.get_json(), session["revision"]))
+        result = gateway.execute(action, request.get_json(), session["revision"])
+        response = make_response(jsonify(result))
+        if action in {"dialogs", "members", "resolve", "identify"}:
+            hit, cached_at = gateway.consume_last_meta()
+            response.headers["X-Cache"] = "HIT" if hit else "MISS"
+            if cached_at is not None:
+                response.headers["X-Cache-At"] = str(int(cached_at))
+        return response
+
+    @app.get("/api/cache")
+    @protected
+    def cache_info():
+        return jsonify(
+            telegram=gateway.cache_stats(),
+            ai_models=ai_cache_count(),
+            ai_ttl_seconds=int(AI_MODELS_CACHE_TTL),
+        )
+
+    @app.post("/api/cache/clear")
+    @protected
+    def cache_clear():
+        body = request.get_json() or {}
+        scope = str(body.get("scope", "all")).strip()
+        if scope not in {"all", "telegram", "ai"}:
+            raise ValueError("无效缓存范围")
+        if scope in {"all", "telegram"}:
+            gateway.clear_cache()
+        if scope in {"all", "ai"}:
+            clear_ai_cache()
+        return jsonify(
+            message="缓存已清空，下次查询将实时拉取最新数据。",
+            telegram=gateway.cache_stats(),
+            ai_models=ai_cache_count(),
+            ai_ttl_seconds=int(AI_MODELS_CACHE_TTL),
+        )
 
     @app.post("/api/checkin-test")
     @protected

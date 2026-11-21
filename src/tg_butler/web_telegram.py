@@ -1,8 +1,10 @@
-"""Short-lived Telegram web login challenges; never expose the account session."""
+"""Short-lived Telegram web login challenges and TTL-cached read queries."""
 
 from __future__ import annotations
 
 import asyncio
+import copy
+import threading
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -20,12 +22,246 @@ from tg_butler.config import ApplicationCredentials, load_settings
 from tg_butler.store import Store
 from tg_butler.summary import day_bounds
 
+DIALOGS_CACHE_TTL = 600.0
+MEMBERS_CACHE_TTL = 600.0
+RESOLVE_CACHE_TTL = 900.0
+ENTITY_CACHE_TTL = 900.0
+MAX_CACHE_ENTRIES = 256
+
+
+def _normalize_reference(raw: str) -> str:
+    reference = str(raw).strip().removeprefix("@")
+    for prefix in (
+        "https://t.me/",
+        "http://t.me/",
+        "https://telegram.me/",
+        "http://telegram.me/",
+    ):
+        if reference.lower().startswith(prefix):
+            reference = reference[len(prefix) :].split("?", 1)[0].split("/", 1)[0]
+            break
+    return reference
+
 
 class TelegramGateway:
     def __init__(self, config, control):
         self.config = config
         self.control = control
         self.pending: dict = {}
+        self._cache_lock = threading.Lock()
+        self._local = threading.local()
+        self._dialogs_cache: dict[str, tuple[float, float, list[dict]]] = {}
+        self._members_cache: dict[tuple[str, int], tuple[float, float, list[dict]]] = {}
+        self._resolve_cache: dict[tuple[str, str, str], tuple[float, float, dict]] = {}
+        self._entity_cache: dict[tuple[str, str, int], tuple[float, float, dict]] = {}
+
+    def _prune_locked(self, now: float) -> None:
+        self._dialogs_cache = {
+            k: v for k, v in self._dialogs_cache.items() if now - v[0] < DIALOGS_CACHE_TTL
+        }
+        self._members_cache = {
+            k: v for k, v in self._members_cache.items() if now - v[0] < MEMBERS_CACHE_TTL
+        }
+        self._resolve_cache = {
+            k: v for k, v in self._resolve_cache.items() if now - v[0] < RESOLVE_CACHE_TTL
+        }
+        self._entity_cache = {
+            k: v for k, v in self._entity_cache.items() if now - v[0] < ENTITY_CACHE_TTL
+        }
+
+    def _trim_dict_locked(self, cache: dict) -> None:
+        if len(cache) <= MAX_CACHE_ENTRIES:
+            return
+        oldest = sorted(cache.items(), key=lambda item: item[1][0])[
+            : len(cache) - MAX_CACHE_ENTRIES
+        ]
+        for key, _ in oldest:
+            cache.pop(key, None)
+
+    def cache_stats(self) -> dict:
+        now = time.monotonic()
+        with self._cache_lock:
+            self._prune_locked(now)
+            return {
+                "dialogs": len(self._dialogs_cache),
+                "members": len(self._members_cache),
+                "resolve": len(self._resolve_cache),
+                "entities": len(self._entity_cache),
+                "ttl_seconds": int(DIALOGS_CACHE_TTL),
+            }
+
+    def clear_cache(self, account_id: str | None = None) -> dict:
+        with self._cache_lock:
+            if account_id is None:
+                self._dialogs_cache.clear()
+                self._members_cache.clear()
+                self._resolve_cache.clear()
+                self._entity_cache.clear()
+            else:
+                self._dialogs_cache.pop(account_id, None)
+                self._members_cache = {
+                    k: v for k, v in self._members_cache.items() if k[0] != account_id
+                }
+                self._resolve_cache = {
+                    k: v for k, v in self._resolve_cache.items() if k[0] != account_id
+                }
+                self._entity_cache = {
+                    k: v for k, v in self._entity_cache.items() if k[0] != account_id
+                }
+        return self.cache_stats()
+
+    def consume_last_meta(self) -> tuple[bool, float | None]:
+        meta = getattr(self._local, "last_meta", (False, None))
+        self._local.last_meta = (False, None)
+        return meta
+
+    def _account_exists(self, account_id: str) -> bool:
+        try:
+            settings = load_settings(self.config)
+        except Exception:
+            return False
+        return account_id in {account.id for account in settings.accounts}
+
+    def _lookup_cache(self, action: str, data: dict) -> tuple[dict, float] | None:
+        if bool(data.get("refresh")):
+            return None
+        account_id = str(data.get("account_id", "default"))
+        if not self._account_exists(account_id):
+            return None
+        now = time.monotonic()
+        with self._cache_lock:
+            self._prune_locked(now)
+            if action == "dialogs":
+                entry = self._dialogs_cache.get(account_id)
+                if entry is not None:
+                    return {"items": copy.deepcopy(entry[2])}, entry[1]
+            elif action == "members":
+                try:
+                    chat_id = int(data.get("chat_id", 0))
+                except (TypeError, ValueError):
+                    return None
+                entry = self._members_cache.get((account_id, chat_id))
+                if entry is not None:
+                    return {"items": copy.deepcopy(entry[2])}, entry[1]
+            elif action == "resolve":
+                kind = str(data.get("kind", "")).strip()
+                norm = _normalize_reference(data.get("reference", "")).lower()
+                if kind in {"group", "user"} and norm:
+                    entry = self._resolve_cache.get((account_id, kind, norm))
+                    if entry is not None:
+                        return copy.deepcopy(entry[2]), entry[1]
+            elif action == "identify":
+                kind = str(data.get("kind", ""))
+                raw_ids = data.get("ids", [data.get("id", "")])
+                if (
+                    kind in {"group", "user"}
+                    and isinstance(raw_ids, list)
+                    and 1 <= len(raw_ids) <= 20
+                ):
+                    items = []
+                    oldest_wall: float | None = None
+                    for raw_id in raw_ids:
+                        try:
+                            entity_id = int(raw_id)
+                            if not entity_id:
+                                return None
+                        except (TypeError, ValueError):
+                            return None
+                        entry = self._entity_cache.get((account_id, kind, entity_id))
+                        if entry is None:
+                            return None
+                        items.append(copy.deepcopy(entry[2]))
+                        oldest_wall = (
+                            entry[1] if oldest_wall is None else min(oldest_wall, entry[1])
+                        )
+                    return {"items": items}, oldest_wall or time.time()
+        return None
+
+    def _store_cache(self, action: str, data: dict, result: dict) -> float:
+        account_id = str(data.get("account_id", "default"))
+        now = time.monotonic()
+        wall = time.time()
+        with self._cache_lock:
+            if action in {"verify-code", "password"} and result.get("status") == "authorized":
+                self._dialogs_cache.pop(account_id, None)
+                self._members_cache = {
+                    k: v for k, v in self._members_cache.items() if k[0] != account_id
+                }
+                self._resolve_cache = {
+                    k: v for k, v in self._resolve_cache.items() if k[0] != account_id
+                }
+                self._entity_cache = {
+                    k: v for k, v in self._entity_cache.items() if k[0] != account_id
+                }
+                return wall
+            if action == "dialogs" and isinstance(result.get("items"), list):
+                items = copy.deepcopy(result["items"])
+                self._dialogs_cache[account_id] = (now, wall, items)
+                for item in items:
+                    if isinstance(item.get("id"), int):
+                        self._entity_cache[(account_id, "group", item["id"])] = (
+                            now,
+                            wall,
+                            {
+                                "id": item["id"],
+                                "name": item.get("name", ""),
+                                "username": item.get("username", ""),
+                            },
+                        )
+                self._trim_dict_locked(self._entity_cache)
+            elif action == "members" and isinstance(result.get("items"), list):
+                try:
+                    chat_id = int(data.get("chat_id", 0))
+                except (TypeError, ValueError):
+                    return wall
+                items = copy.deepcopy(result["items"])
+                self._members_cache[(account_id, chat_id)] = (now, wall, items)
+                self._trim_dict_locked(self._members_cache)
+                for item in items:
+                    if isinstance(item.get("id"), int):
+                        self._entity_cache[(account_id, "user", item["id"])] = (
+                            now,
+                            wall,
+                            {
+                                "id": item["id"],
+                                "name": item.get("name", ""),
+                                "username": item.get("username", ""),
+                            },
+                        )
+                self._trim_dict_locked(self._entity_cache)
+            elif action == "resolve" and "id" in result:
+                kind = str(data.get("kind", "")).strip()
+                norm = _normalize_reference(data.get("reference", "")).lower()
+                if kind in {"group", "user"} and norm:
+                    self._resolve_cache[(account_id, kind, norm)] = (
+                        now,
+                        wall,
+                        copy.deepcopy(result),
+                    )
+                    self._trim_dict_locked(self._resolve_cache)
+                if isinstance(result.get("id"), int) and result.get("kind") in {"group", "user"}:
+                    self._entity_cache[(account_id, result["kind"], result["id"])] = (
+                        now,
+                        wall,
+                        {
+                            "id": result["id"],
+                            "name": result.get("name", ""),
+                            "username": result.get("username", ""),
+                        },
+                    )
+                    self._trim_dict_locked(self._entity_cache)
+            elif action == "identify" and isinstance(result.get("items"), list):
+                kind = str(data.get("kind", ""))
+                if kind in {"group", "user"}:
+                    for item in result["items"]:
+                        if "error" not in item and isinstance(item.get("id"), int):
+                            self._entity_cache[(account_id, kind, item["id"])] = (
+                                now,
+                                wall,
+                                copy.deepcopy(item),
+                            )
+                    self._trim_dict_locked(self._entity_cache)
+        return wall
 
     async def request(self, action: str, data: dict, owner: str) -> dict:
         settings = load_settings(self.config)
@@ -123,7 +359,32 @@ class TelegramGateway:
                     return {"message": labels.get(run["status"], "测试签到已执行")}
                 finally:
                     store.close()
-            dialogs = await client.get_dialogs()
+            if action == "resolve":
+                reference = _normalize_reference(data.get("reference", ""))
+                kind = str(data.get("kind", "")).strip()
+                if kind not in {"group", "user"}:
+                    raise ValueError("无效的查询类型")
+                if not reference:
+                    raise ValueError("请输入群组链接或用户名")
+                if reference.startswith(("+", "joinchat/", "c/")):
+                    raise ValueError("暂不支持私密邀请链接，请输入公开群组链接或 @用户名")
+                entity = await client.get_entity(reference)
+                is_user = isinstance(entity, User)
+                if kind == "group" and is_user:
+                    raise ValueError("该地址对应的是用户，请输入群组链接或群组用户名")
+                if kind == "user" and not is_user:
+                    raise ValueError("该地址对应的是群组，请输入用户 @用户名")
+                return {
+                    # Use Telethon's marked peer ID so channels/supergroups match
+                    # dialog IDs (for example, -1001234567890).
+                    "id": get_peer_id(entity),
+                    "name": get_display_name(entity)
+                    or getattr(entity, "title", None)
+                    or getattr(entity, "name", "")
+                    or "",
+                    "username": getattr(entity, "username", "") or "",
+                    "kind": "user" if is_user else "group",
+                }
             if action == "identify":
                 kind = str(data.get("kind", ""))
                 if kind not in {"group", "user"}:
@@ -131,6 +392,7 @@ class TelegramGateway:
                 raw_ids = data.get("ids", [data.get("id", "")])
                 if not isinstance(raw_ids, list) or not 1 <= len(raw_ids) <= 20:
                     raise ValueError("每次最多核对 20 个 ID")
+                dialogs = await client.get_dialogs() if kind == "group" else []
                 results = []
                 for raw_id in raw_ids:
                     try:
@@ -162,14 +424,13 @@ class TelegramGateway:
                             {"id": str(raw_id), "error": "查询失败，请确认账号权限和 ID"}
                         )
                 return {"items": results}
+            dialogs = await client.get_dialogs()
             if action == "dialogs":
                 items = []
                 for item in dialogs:
                     if item.is_group or item.is_channel:
                         items.append({"id": item.id, "name": item.name})
-                return {
-                    "items": items
-                }
+                return {"items": items}
             if action == "members":
                 chat_id = int(data.get("chat_id", 0))
                 chat = next((item.entity for item in dialogs if item.id == chat_id), None)
@@ -185,41 +446,6 @@ class TelegramGateway:
                         }
                     )
                 return {"items": items}
-            if action == "resolve":
-                reference = str(data.get("reference", "")).strip().removeprefix("@")
-                kind = str(data.get("kind", "")).strip()
-                if kind not in {"group", "user"}:
-                    raise ValueError("无效的查询类型")
-                if not reference:
-                    raise ValueError("请输入群组链接或用户名")
-                for prefix in (
-                    "https://t.me/",
-                    "http://t.me/",
-                    "https://telegram.me/",
-                    "http://telegram.me/",
-                ):
-                    if reference.lower().startswith(prefix):
-                        reference = reference[len(prefix) :].split("?", 1)[0].split("/", 1)[0]
-                        break
-                if not reference or reference.startswith(("+", "joinchat/", "c/")):
-                    raise ValueError("暂不支持私密邀请链接，请输入公开群组链接或 @用户名")
-                entity = await client.get_entity(reference)
-                is_user = isinstance(entity, User)
-                if kind == "group" and is_user:
-                    raise ValueError("该地址对应的是用户，请输入群组链接或群组用户名")
-                if kind == "user" and not is_user:
-                    raise ValueError("该地址对应的是群组，请输入用户 @用户名")
-                return {
-                    # Use Telethon's marked peer ID so channels/supergroups match
-                    # dialog IDs (for example, -1001234567890).
-                    "id": get_peer_id(entity),
-                    "name": get_display_name(entity)
-                    or getattr(entity, "title", None)
-                    or getattr(entity, "name", "")
-                    or "",
-                    "username": getattr(entity, "username", "") or "",
-                    "kind": "user" if is_user else "group",
-                }
             if action == "history":
                 chat_id = int(data.get("chat_id", 0))
                 days = int(data.get("days", 1))
@@ -280,6 +506,13 @@ class TelegramGateway:
             await client.disconnect()
 
     def execute(self, action: str, data: dict, owner: str) -> dict:
+        data = data or {}
+        self._local.last_meta = (False, None)
+        cached = self._lookup_cache(action, data)
+        if cached is not None:
+            result, cached_at = cached
+            self._local.last_meta = (True, cached_at)
+            return result
         # Same lock is used by bu before any access to the Telethon session.
         with FileLock(str(self.config.parent / "data" / "telegram.lock"), timeout=2):
             active = self.control("status").strip() == "active"
@@ -287,9 +520,12 @@ class TelegramGateway:
                 self.control("stop")
             timeout = 660 if action == "checkin-test" else 180 if action == "history" else 60
             try:
-                return asyncio.run(
+                result = asyncio.run(
                     asyncio.wait_for(self.request(action, data, owner), timeout=timeout)
                 )
             finally:
                 if active:
                     self.control("start")
+        stored_at = self._store_cache(action, data, result)
+        self._local.last_meta = (False, stored_at)
+        return result
